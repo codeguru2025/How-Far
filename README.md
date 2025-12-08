@@ -1,93 +1,78 @@
-# RidePass - Hybrid Route-Broadcast + QR Payment Transport Platform
+# RidePass - Transport Platform with Supabase
 
-A comprehensive transport platform for drivers to broadcast routes and accept QR payments, and for passengers to find nearby vehicles and pay seamlessly.
+A comprehensive transport platform for drivers to broadcast routes and accept QR payments, and for passengers to find nearby vehicles and pay seamlessly. **Powered by Supabase**.
 
-## 🚀 Overview
+## 🚀 Tech Stack
 
-RidePass is a full-stack transport platform featuring:
+- **Mobile App**: React Native / Expo
+- **Backend**: NestJS
+- **Database**: Supabase PostgreSQL
+- **Auth**: Supabase Auth (Phone OTP)
+- **Real-time**: Supabase Realtime
+- **Storage**: Supabase Storage
+- **ORM**: Prisma
 
-- **Drivers**: Create account, verify ID + vehicle, broadcast live GPS & routes, display QR for payments
-- **Passengers**: Find nearby vehicles, see routes on map, pay via QR/wallet, share trips with family
-- **Admin**: Verify users/vehicles, manage reports, control payouts, view analytics
+## 📱 Features
 
-## 📱 Mobile App (React Native / Expo)
+### For Drivers
+- ✅ Create account & verify ID
+- ✅ Register & verify vehicle
+- ✅ Go online/offline
+- ✅ Broadcast live GPS location
+- ✅ Select & broadcast route
+- ✅ Accept/reject passengers
+- ✅ Display QR code for payment
+- ✅ View earnings & settlements
 
-The mobile app is built with:
-- **Expo Router** - File-based navigation
-- **React Native** - Cross-platform iOS/Android/Web
-- **React Query** - Server state management
-- **Zustand** - Client state management
-- **expo-location** - GPS tracking
-- **expo-camera** - QR code scanning
+### For Passengers
+- ✅ Register & verify identity
+- ✅ See nearby vehicles on map
+- ✅ View vehicle routes & destinations
+- ✅ Pay via QR code scan
+- ✅ Pay via wallet
+- ✅ View ride history
+- ✅ Share trip with family
 
-### App Structure
+### Safety Features (Mandatory)
+- ✅ Driver ID verification
+- ✅ Vehicle verification
+- ✅ Emergency SOS button
+- ✅ Guardian accounts for minors
+- ✅ Real-time trip sharing
+- ✅ Ratings & behaviour scores
+- ✅ Zero cash handling
 
-```
-app/
-├── (commuter)/           # Passenger screens
-│   ├── home.tsx         # Dashboard with wallet, nearby drivers
-│   ├── auth.tsx         # Registration/login
-│   ├── plans.tsx        # Subscription plans
-│   ├── payment.tsx      # Payment flow
-│   ├── history.tsx      # Ride history
-│   ├── wallet.tsx       # Wallet management
-│   └── map.tsx          # Live map with drivers
-├── (operator)/           # Driver screens  
-│   ├── home.tsx         # Driver dashboard with QR, stats
-│   ├── auth.tsx         # Driver registration
-│   ├── routes.tsx       # Route management
-│   └── earnings.tsx     # Earnings & settlements
-├── index.tsx            # Entry point
-├── onboarding.tsx       # Onboarding screens
-└── role-select.tsx      # Role selection
-```
-
-### Running the Mobile App
-
-```bash
-# Install dependencies
-bun install
-
-# Start development server
-bun run start
-
-# Start with web preview
-bun run start-web
-```
-
-## 🖥 Backend API (NestJS)
-
-A production-ready NestJS backend with:
-- **PostgreSQL** database with Prisma ORM
-- **WebSockets** for real-time location updates
-- **JWT Authentication** with OTP verification
-- **Modular Architecture** - Clean, scalable code structure
-
-### Backend Structure
+## 🏗 Project Structure
 
 ```
-backend/
-├── src/
-│   ├── auth/            # Authentication (OTP, JWT)
-│   ├── users/           # User management
-│   ├── drivers/         # Driver profiles & verification
-│   ├── vehicles/        # Vehicle registration
-│   ├── routes/          # Route broadcasting
-│   ├── rides/           # Ride lifecycle
-│   ├── wallet/          # Wallet & QR payments
-│   ├── transactions/    # Transaction history
-│   ├── settlements/     # Driver payouts
-│   ├── safety/          # SOS & reports
-│   ├── notifications/   # Push notifications
-│   ├── admin/           # Admin panel
-│   └── websockets/      # Real-time location
-├── prisma/
-│   ├── schema.prisma    # Database schema
-│   └── seed.ts          # Seed data
-└── docker-compose.yml   # Docker setup
+workspace/
+├── app/                    # Mobile app screens (Expo Router)
+│   ├── (commuter)/        # Passenger screens
+│   └── (operator)/        # Driver screens
+├── services/
+│   ├── api.ts             # REST API client
+│   └── supabase.ts        # Supabase client
+├── backend/               # NestJS backend
+│   ├── src/
+│   │   ├── auth/         # Auth with Supabase
+│   │   ├── drivers/      # Driver management
+│   │   ├── wallet/       # QR payments
+│   │   └── ...
+│   └── prisma/
+│       └── schema.prisma  # Database schema
+└── types/                 # TypeScript types
 ```
 
-### Running the Backend
+## 🛠 Quick Start
+
+### 1. Setup Supabase
+
+1. Create project at [supabase.com](https://supabase.com)
+2. Enable **Phone Auth** in Authentication settings
+3. Create storage buckets: `avatars`, `licences`, `vehicles`
+4. Get credentials from Settings > API
+
+### 2. Configure Backend
 
 ```bash
 cd backend
@@ -95,207 +80,194 @@ cd backend
 # Install dependencies
 npm install
 
-# Setup environment
+# Configure environment
 cp .env.example .env
-# Edit .env with your database credentials
+# Edit .env with your Supabase credentials:
+# - SUPABASE_URL
+# - SUPABASE_ANON_KEY
+# - SUPABASE_SERVICE_ROLE_KEY
+# - DATABASE_URL (from Supabase)
+# - JWT_SECRET (from Supabase)
 
-# Generate Prisma client
+# Push database schema
 npx prisma generate
+npx prisma db push
 
-# Run database migrations
-npx prisma migrate dev
-
-# Seed database
+# Seed test data
 npx prisma db seed
 
-# Start development server
+# Start server
 npm run start:dev
 ```
 
-### Using Docker
+### 3. Configure Mobile App
 
-```bash
-cd backend
+Create `.env` in workspace root:
 
-# Start all services (PostgreSQL, Redis, API)
-docker-compose up -d
-
-# Run migrations
-docker-compose exec api npx prisma migrate deploy
-
-# Seed database
-docker-compose exec api npx prisma db seed
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1
 ```
 
-## 📊 Database Schema
+```bash
+# Install dependencies
+bun install
+# or
+npm install --legacy-peer-deps
 
-### Core Tables
+# Start app
+bun run start-web
+```
 
-| Table | Description |
-|-------|-------------|
-| Users | All users (passengers, drivers, admins) |
-| Drivers | Driver profiles with licence info |
-| Vehicles | Registered vehicles |
-| Routes | Broadcasted routes with polylines |
-| LiveLocation | Real-time GPS data |
-| Rides | Ride requests and history |
-| Wallet | User wallet balances |
-| Transactions | All financial transactions |
-| Settlements | Driver payouts |
-| SafetyReports | Safety incident reports |
-| SosAlerts | Emergency SOS alerts |
+## 🔑 Environment Variables
 
-## 🔐 Safety Features (Mandatory)
+### Backend (.env)
 
-All safety features are built-in and non-negotiable:
+```env
+# Supabase
+DATABASE_URL="postgresql://..."
+DIRECT_URL="postgresql://..."
+SUPABASE_URL="https://[ref].supabase.co"
+SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
 
-- ✅ Driver ID verification (photo + ID upload)
-- ✅ Vehicle verification (plate + licence)
-- ✅ Passenger emergency SOS button
-- ✅ Driver emergency SOS button
-- ✅ Guardian/parent linked accounts for minors
-- ✅ Real-time trip sharing link for family
-- ✅ Automatic flagging of unusual patterns
-- ✅ Ratings and behaviour score system
-- ✅ Zero cash handling (QR + wallet only)
+# JWT (use Supabase JWT secret)
+JWT_SECRET="your-jwt-secret"
 
-## 💰 Wallet & Payment System
+# Server
+PORT=3000
+NODE_ENV=development
+```
 
-### Passenger Flow
-1. Top-up wallet using EcoCash, InnBucks, or bank transfer
-2. Find a vehicle on the map
-3. Scan driver's QR code to pay
-4. Amount deducted from wallet
+### Mobile App (.env)
 
-### Driver Flow
-1. Go online and broadcast route
-2. Accept passengers
-3. Generate QR code for fare amount
-4. Receive payment in wallet
-5. Get automated daily/weekly/monthly settlements
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://[ref].supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+EXPO_PUBLIC_API_URL=http://localhost:3000/api/v1
+```
 
-## 🌐 API Endpoints
+## 📡 Real-time Location Tracking
 
-### Authentication
-- `POST /api/v1/auth/send-otp` - Send OTP
-- `POST /api/v1/auth/login` - Login
-- `POST /api/v1/auth/register` - Register
+### Driver (Broadcasting)
 
-### Drivers
-- `GET /api/v1/drivers/nearby` - Get nearby drivers
-- `PUT /api/v1/drivers/status` - Go online/offline
-- `PUT /api/v1/drivers/location` - Update location
+```typescript
+import { supabaseRealtime } from '@/services/supabase';
 
-### Routes
-- `GET /api/v1/routes/active` - Get active routes
-- `GET /api/v1/routes/nearby` - Get nearby routes
-- `POST /api/v1/routes` - Create route
+// Broadcast location every 5 seconds
+setInterval(async () => {
+  const location = await Location.getCurrentPositionAsync();
+  
+  await supabaseRealtime.broadcastLocation({
+    driverId: driver.id,
+    lat: location.coords.latitude,
+    lng: location.coords.longitude,
+    speed: location.coords.speed,
+    heading: location.coords.heading,
+  });
+}, 5000);
+```
 
-### Rides
-- `POST /api/v1/rides/request` - Request ride
-- `PUT /api/v1/rides/:id/status` - Update status
-- `POST /api/v1/rides/:id/share` - Share trip
+### Passenger (Listening)
 
-### Wallet
-- `GET /api/v1/wallet` - Get wallet
-- `POST /api/v1/wallet/top-up` - Top up
-- `POST /api/v1/wallet/generate-qr` - Generate payment QR
-- `POST /api/v1/wallet/pay-qr` - Pay via QR
+```typescript
+import { supabaseRealtime } from '@/services/supabase';
 
-### Safety
-- `POST /api/v1/safety/sos` - Trigger SOS
-- `POST /api/v1/safety/report` - Submit report
-
-## 📡 WebSocket Events
-
-Connect to `/location` namespace for real-time updates:
-
-```javascript
-// Driver: Update location
-socket.emit('location:update', {
-  driverId: 'driver-id',
-  lat: -17.8292,
-  lng: 31.0522,
-  speed: 45.5,
-  heading: 90
+// Subscribe to all driver locations
+supabaseRealtime.subscribeToDriverLocations((location) => {
+  // Update map markers
+  updateDriverMarker(location.driverId, location.lat, location.lng);
 });
+```
 
-// Passenger: Subscribe to driver
-socket.emit('subscribe:driver', { driverId: 'driver-id' });
+## 💰 Payment Flow
 
-// Receive location updates
-socket.on('location:updated', (data) => {
-  console.log('Driver location:', data);
-});
+### Driver Generates QR
+
+```typescript
+// 1. Driver generates QR for fare
+const qr = await walletApi.generateQr(1.50); // $1.50
+
+// 2. Display qr.qrData (base64 image)
+<Image source={{ uri: qr.qrData }} />
+```
+
+### Passenger Scans & Pays
+
+```typescript
+// 1. Scan QR code
+const result = await BarCodeScanner.scanFromURLAsync(imageUri);
+
+// 2. Pay via API
+const payment = await walletApi.payViaQr(result.data);
+// { success: true, amount: 1.50, driverName: "John" }
 ```
 
 ## 🧪 Test Accounts
 
 After seeding the database:
 
-| Role | Phone | Description |
-|------|-------|-------------|
-| Admin | +263770000000 | System admin |
-| Passenger | +263771111111 | Test passenger ($50 balance) |
-| Driver | +263772222222 | Verified driver with vehicle |
+| Role | Phone | Password | Balance |
+|------|-------|----------|---------|
+| Admin | +263770000000 | OTP | - |
+| Passenger | +263771111111 | OTP | $50.00 |
+| Driver | +263772222222 | OTP | $0.00 |
 
-## 🛠 Technology Stack
+**Note**: In development, OTPs are logged to the console.
 
-### Mobile
-- React Native 0.81
-- Expo 54
-- Expo Router 6
-- TypeScript
-- React Query
-- Zustand
+## 📚 API Documentation
 
-### Backend
-- NestJS 10
-- PostgreSQL 15
-- Prisma ORM 5
-- Socket.io 4
-- JWT + Passport
-- Docker
+Access Swagger docs at: `http://localhost:3000/api/docs`
 
-## 📁 Project Structure
+### Key Endpoints
 
+| Endpoint | Description |
+|----------|-------------|
+| `POST /auth/send-otp` | Send OTP to phone |
+| `POST /auth/login` | Login with OTP |
+| `GET /drivers/nearby` | Get nearby drivers |
+| `PUT /drivers/location` | Update driver location |
+| `GET /routes/active` | Get active routes |
+| `POST /wallet/generate-qr` | Generate payment QR |
+| `POST /wallet/pay-qr` | Pay via QR |
+| `POST /safety/sos` | Trigger SOS alert |
+
+## 🔒 Security
+
+- **Row Level Security (RLS)**: Enabled on all Supabase tables
+- **JWT Validation**: All API requests validated
+- **Phone OTP**: Secure authentication
+- **Service Role**: Backend uses service role key (never expose to client)
+
+## 📦 Deployment
+
+### Backend (Railway/Render)
+
+1. Connect GitHub repo
+2. Set environment variables
+3. Deploy
+
+### Mobile App (EAS)
+
+```bash
+# Install EAS CLI
+npm install -g @expo/eas-cli
+
+# Build for iOS/Android
+eas build --platform all
+
+# Submit to stores
+eas submit
 ```
-workspace/
-├── app/                  # Mobile app screens
-├── assets/               # Images and icons
-├── constants/            # Colors, config
-├── contexts/             # React contexts
-├── services/             # API services
-├── types/                # TypeScript types
-├── utils/                # Utility functions
-├── backend/              # NestJS backend
-│   ├── src/             # Source code
-│   ├── prisma/          # Database schema
-│   └── docker-compose.yml
-├── package.json          # Mobile dependencies
-└── README.md            # This file
-```
 
-## 🚀 Deployment
+## 🤝 Contributing
 
-### Mobile App
-1. Build with EAS: `eas build --platform all`
-2. Submit to stores: `eas submit`
-
-### Backend
-1. Build Docker image: `docker build -t ridepass-api .`
-2. Deploy to cloud (AWS, GCP, DigitalOcean)
-3. Set environment variables
-4. Run migrations: `prisma migrate deploy`
+1. Fork the repo
+2. Create feature branch
+3. Commit changes
+4. Open pull request
 
 ## 📄 License
 
 MIT
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch
-3. Commit changes
-4. Push to branch
-5. Open pull request

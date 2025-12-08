@@ -1,13 +1,14 @@
 // Prisma schema for RidePass Transport Platform
-// Comprehensive database schema for drivers, passengers, vehicles, routes, rides, wallet, and safety
+// Configured for Supabase PostgreSQL
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ==================== ENUMS ====================
@@ -113,6 +114,7 @@ enum NotificationType {
 
 model User {
   id              String             @id @default(uuid())
+  supabaseId      String?            @unique // Links to Supabase Auth user
   phone           String             @unique
   email           String?            @unique
   name            String
@@ -145,6 +147,7 @@ model User {
 
   @@index([phone])
   @@index([email])
+  @@index([supabaseId])
   @@index([role])
 }
 
@@ -416,7 +419,7 @@ model SafetyReport {
   target       User             @relation("ReportTarget", fields: [targetId], references: [id])
   type         SafetyReportType
   description  String
-  evidence     String[]         // Array of image/video URLs
+  evidence     String[]         // Array of image/video URLs (Supabase Storage)
   location     Json?            // {lat, lng}
   status       ReportStatus     @default(PENDING)
   resolvedAt   DateTime?

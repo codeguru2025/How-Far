@@ -5,6 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 // Core modules
 import { PrismaModule } from './common/prisma/prisma.module';
+import { SupabaseModule } from './common/supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DriversModule } from './drivers/drivers.module';
@@ -38,8 +39,9 @@ import { WebsocketsModule } from './websockets/websockets.module';
     // Scheduled tasks
     ScheduleModule.forRoot(),
 
-    // Database
+    // Database & Services
     PrismaModule,
+    SupabaseModule,
 
     // Feature modules
     AuthModule,

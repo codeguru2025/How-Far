@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { SupabaseService } from '../common/supabase/supabase.service';
 import { UsersService } from '../users/users.service';
 import {
   SendOtpDto,
@@ -19,18 +20,38 @@ import { UserRole } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
+  private useSupabaseAuth: boolean;
+
   constructor(
     private prisma: PrismaService,
+    private supabase: SupabaseService,
     private jwtService: JwtService,
     private configService: ConfigService,
     private usersService: UsersService,
-  ) {}
+  ) {
+    // Use Supabase Auth if configured
+    this.useSupabaseAuth = !!this.configService.get('SUPABASE_URL');
+  }
 
   /**
    * Send OTP to phone number
    */
   async sendOtp(dto: SendOtpDto): Promise<{ message: string; expiresIn: number }> {
-    // Generate 6-digit OTP
+    if (this.useSupabaseAuth) {
+      // Use Supabase Auth OTP
+      try {
+        await this.supabase.signUpWithPhone(dto.phone);
+        return {
+          message: 'OTP sent successfully via Supabase',
+          expiresIn: 600,
+        };
+      } catch (error: any) {
+        console.error('Supabase OTP error:', error);
+        // Fall back to custom OTP
+      }
+    }
+
+    // Custom OTP implementation
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -40,7 +61,6 @@ export class AuthService {
     });
 
     if (!user) {
-      // Create temporary user record
       user = await this.prisma.user.create({
         data: {
           phone: dto.phone,
@@ -65,20 +85,50 @@ export class AuthService {
       },
     });
 
-    // TODO: Integrate with SMS provider (Twilio, Africa's Talking, etc.)
-    // For development, log the OTP
+    // TODO: Send SMS via provider (Africa's Talking, Twilio, etc.)
     console.log(`📱 OTP for ${dto.phone}: ${code}`);
 
     return {
       message: 'OTP sent successfully',
-      expiresIn: 600, // 10 minutes in seconds
+      expiresIn: 600,
     };
   }
 
   /**
    * Verify OTP code
    */
-  async verifyOtp(dto: VerifyOtpDto): Promise<{ valid: boolean; isNewUser: boolean }> {
+  async verifyOtp(dto: VerifyOtpDto): Promise<{ valid: boolean; isNewUser: boolean; supabaseUser?: any }> {
+    if (this.useSupabaseAuth) {
+      try {
+        const { user, session } = await this.supabase.verifyPhoneOtp(dto.phone, dto.code);
+        
+        // Check if user exists in our database
+        const existingUser = await this.prisma.user.findUnique({
+          where: { phone: dto.phone },
+        });
+
+        const isNewUser = !existingUser || existingUser.name === 'New User';
+
+        // If user exists in Supabase but not linked to our DB user, link them
+        if (existingUser && !existingUser.supabaseId && user) {
+          await this.prisma.user.update({
+            where: { id: existingUser.id },
+            data: { supabaseId: user.id },
+          });
+        }
+
+        return { 
+          valid: true, 
+          isNewUser,
+          supabaseUser: user,
+        };
+      } catch (error) {
+        // Fall back to custom OTP verification
+        console.log('Supabase OTP verification failed, using custom:', error);
+      }
+    }
+
+    // Custom OTP verification
     const user = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
     });
@@ -106,7 +156,6 @@ export class AuthService {
       data: { used: true },
     });
 
-    // Check if user needs to complete registration
     const isNewUser = user.name === 'New User';
 
     return { valid: true, isNewUser };
@@ -171,19 +220,27 @@ export class AuthService {
     }
 
     // Create wallet for the user
-    await this.prisma.wallet.create({
-      data: { userId: user.id },
+    await this.prisma.wallet.upsert({
+      where: { userId: user.id },
+      update: {},
+      create: { userId: user.id },
     });
 
     // Create driver profile if role is DRIVER
     if (dto.role === UserRole.DRIVER) {
-      await this.prisma.driver.create({
-        data: {
-          userId: user.id,
-          licenceNumber: '',
-          licenceImage: '',
-        },
+      const existingDriver = await this.prisma.driver.findUnique({
+        where: { userId: user.id },
       });
+
+      if (!existingDriver) {
+        await this.prisma.driver.create({
+          data: {
+            userId: user.id,
+            licenceNumber: '',
+            licenceImage: '',
+          },
+        });
+      }
     }
 
     return this.generateTokens(user);
