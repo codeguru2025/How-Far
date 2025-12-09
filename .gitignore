@@ -1,0 +1,83 @@
+# ============================================
+# Ndeip-Zthin .gitignore
+# ============================================
+
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.expo/
+web-build/
+*.apk
+*.aab
+*.ipa
+*.app
+
+# Environment files - NEVER commit these!
+.env
+.env.local
+.env.development
+.env.staging
+.env.production
+*.env
+expo-app/.env
+
+# Secrets and credentials
+*.pem
+*.p12
+*.key
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+service-account.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# Expo
+.expo-shared/
+
+# Metro
+.metro-health-check*
+
+# TypeScript
+*.tsbuildinfo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+

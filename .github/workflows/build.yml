@@ -1,0 +1,56 @@
+# Build Pipeline - Creates app builds
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+jobs:
+  build:
+    name: Build App
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./expo-app
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: expo-app/package-lock.json
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Android
+        if: inputs.platform == 'all' || inputs.platform == 'android' || github.event_name == 'push'
+        run: eas build --platform android --profile production --non-interactive
+
+      - name: Build iOS
+        if: inputs.platform == 'all' || inputs.platform == 'ios' || github.event_name == 'push'
+        run: eas build --platform ios --profile production --non-interactive
+

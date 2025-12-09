@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Ndeip-Zthin",
+    "slug": "ndeip-zthin",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#E85A24",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ndeip.zthin",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["innbucks", "schinn.wbpycode"]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#E85A24"
+      },
+      "package": "com.ndeip.zthin"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}

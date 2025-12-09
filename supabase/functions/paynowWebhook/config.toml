@@ -1,0 +1,5 @@
+# Make this function publicly accessible (no auth required)
+# Required for PayNow webhooks
+[functions.paynowWebhook]
+verify_jwt = false
+
