@@ -39,7 +39,7 @@ export async function initiatePayment(params: {
       let innbucksQR = null;
       let innbucksExpiry = null;
 
-      if (response.isInnbucks && response.innbucks_info?.length > 0) {
+      if (response.isInnbucks && response.innbucks_info && response.innbucks_info.length > 0) {
         const innbucksData = response.innbucks_info[0];
         innbucksCode = innbucksData.authorizationcode;
         innbucksDeepLink = innbucksData.deep_link_url;

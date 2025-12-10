@@ -26,6 +26,8 @@ export function Input({
           style,
         ]}
         placeholderTextColor={COLORS.textMuted}
+        editable={true}
+        selectTextOnFocus={true}
         {...props}
       />
       {error && <Text style={styles.error}>{error}</Text>}

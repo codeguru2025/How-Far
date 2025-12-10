@@ -8,16 +8,27 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:dev": "eas build --profile development --platform all",
-    "build:preview": "eas build --profile preview --platform all",
-    "build:prod": "eas build --profile production --platform all",
-    "build:android": "eas build --platform android --profile production",
-    "build:ios": "eas build --platform ios --profile production",
+    
+    "validate-env": "node scripts/validate-env.js",
+    "validate-env:strict": "node scripts/validate-env.js --strict",
+    "prebuild": "npm run validate-env",
+    
+    "build": "node scripts/build.js",
+    "build:dev": "node scripts/build.js development all",
+    "build:preview": "node scripts/build.js preview all",
+    "build:prod": "node scripts/build.js production all",
+    "build:android": "node scripts/build.js production android",
+    "build:ios": "node scripts/build.js production ios",
+    
     "submit:android": "eas submit --platform android",
     "submit:ios": "eas submit --platform ios",
+    
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf node_modules .expo && npm install"
+    "check": "npm run typecheck && npm run lint",
+    
+    "clean": "rm -rf node_modules .expo && npm install",
+    "reset": "rm -rf node_modules .expo package-lock.json && npm install"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -26,6 +37,7 @@
     "@react-navigation/native-stack": "^7.8.6",
     "@supabase/supabase-js": "^2.87.1",
     "expo": "~54.0.27",
+    "expo-barcode-scanner": "^13.0.1",
     "expo-camera": "~17.0.10",
     "expo-crypto": "^15.0.8",
     "expo-linking": "^8.0.10",
@@ -36,11 +48,16 @@
     "expo-web-browser": "^15.0.10",
     "paynow": "^2.2.2",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-google-places-autocomplete": "^2.6.1",
+    "react-native-maps": "1.20.1",
+    "react-native-maps-directions": "^1.9.0",
     "react-native-qrcode-svg": "^6.3.21",
     "react-native-safe-area-context": "^5.6.2",
-    "react-native-svg": "15.12.1",
+    "react-native-svg": "^15.12.1",
     "react-native-url-polyfill": "^3.0.0",
+    "react-native-web": "^0.21.0",
     "uuid": "^13.0.0",
     "zustand": "^5.0.9"
   },

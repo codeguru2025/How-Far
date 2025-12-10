@@ -15,7 +15,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.ndeip.zthin",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["innbucks", "schinn.wbpycode"]
+        "LSApplicationQueriesSchemes": ["innbucks", "schinn.wbpycode"],
+        "NSLocationWhenInUseUsageDescription": "This app needs your location to show nearby places and calculate ride routes.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to track rides in progress."
+      },
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
       }
     },
     "android": {
@@ -23,13 +28,28 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#E85A24"
       },
-      "package": "com.ndeip.zthin"
+      "package": "com.ndeip.zthin",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Ndeip-Zthin to use your location for ride tracking."
+        }
+      ]
     ]
   }
 }

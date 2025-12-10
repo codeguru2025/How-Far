@@ -57,6 +57,7 @@ export async function signUp(params: {
   password: string;
   firstName: string;
   lastName?: string;
+  role?: 'passenger' | 'driver';
 }): Promise<{ user: User | null; error: string | null }> {
   try {
     const normalizedPhone = normalizePhone(params.phone);
@@ -73,7 +74,7 @@ export async function signUp(params: {
       return { user: null, error: 'User with this phone number already exists' };
     }
 
-    // Create user
+    // Create user with specified role
     const { data: newUser, error } = await supabase
       .from('users')
       .insert({
@@ -81,7 +82,7 @@ export async function signUp(params: {
         first_name: params.firstName,
         last_name: params.lastName,
         password_hash: passwordHash,
-        role: 'passenger',
+        role: params.role || 'passenger',
         status: 'active',
       })
       .select()

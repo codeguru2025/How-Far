@@ -3,11 +3,15 @@ import { supabase } from './supabase';
 import { Wallet } from '../types';
 
 export async function getWallet(userId: string): Promise<Wallet | null> {
+  console.log('getWallet - fetching for userId:', userId);
+  
   const { data, error } = await supabase
     .from('wallets')
     .select('*')
     .eq('user_id', userId)
     .single();
+  
+  console.log('getWallet - result:', data, 'error:', error);
   
   if (error || !data) return null;
   return {

@@ -14,7 +14,7 @@ interface AuthState {
   // Actions
   initialize: () => Promise<void>;
   signIn: (phone: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (params: { phone: string; password: string; firstName: string; lastName?: string }) => Promise<{ success: boolean; error?: string }>;
+  signUp: (params: { phone: string; password: string; firstName: string; lastName?: string; role?: 'passenger' | 'driver' }) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
 }

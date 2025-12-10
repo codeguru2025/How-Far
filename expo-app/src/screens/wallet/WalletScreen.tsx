@@ -1,7 +1,6 @@
-// Wallet Screen
+// Wallet Screen - Role-aware (Commuter vs Driver)
 import React, { useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert, ActivityIndicator } from 'react-native';
-import { BottomNav } from '../../components';
 import { useAuthStore, useWalletStore } from '../../stores';
 import { COLORS } from '../../theme';
 import { Screen } from '../../types';
@@ -13,6 +12,8 @@ interface Props {
 export function WalletScreen({ onNavigate }: Props) {
   const { user } = useAuthStore();
   const { wallet, transactions, isLoading, isRefreshing, refresh, reconcilePendingPayments } = useWalletStore();
+  
+  const isDriver = user?.role === 'driver';
 
   useEffect(() => {
     if (user) {
@@ -68,8 +69,10 @@ export function WalletScreen({ onNavigate }: Props) {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Available Balance</Text>
+        <View style={[styles.balanceCard, isDriver && styles.balanceCardDriver]}>
+          <Text style={styles.balanceLabel}>
+            {isDriver ? 'Your Earnings' : 'Available Balance'}
+          </Text>
           {isLoading ? (
             <ActivityIndicator color="#FFFFFF" size="large" />
           ) : (
@@ -79,18 +82,42 @@ export function WalletScreen({ onNavigate }: Props) {
         </View>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.action} onPress={() => onNavigate('topup')}>
-            <Text style={styles.actionIcon}>➕</Text>
-            <Text style={styles.actionLabel}>Top Up</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.action} onPress={handleFix}>
-            <Text style={styles.actionIcon}>🔧</Text>
-            <Text style={styles.actionLabel}>Fix</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.action} onPress={() => user && refresh(user.id)}>
-            <Text style={styles.actionIcon}>🔄</Text>
-            <Text style={styles.actionLabel}>Refresh</Text>
-          </TouchableOpacity>
+          {isDriver ? (
+            // Driver actions - Withdraw, History, Refresh
+            <>
+              <TouchableOpacity 
+                style={styles.action} 
+                onPress={() => Alert.alert('Coming Soon', 'Withdraw feature will be available soon!')}
+              >
+                <Text style={styles.actionIcon}>💸</Text>
+                <Text style={styles.actionLabel}>Withdraw</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.action} onPress={() => onNavigate('history')}>
+                <Text style={styles.actionIcon}>📜</Text>
+                <Text style={styles.actionLabel}>History</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.action} onPress={() => user && refresh(user.id)}>
+                <Text style={styles.actionIcon}>🔄</Text>
+                <Text style={styles.actionLabel}>Refresh</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            // Commuter actions - Top Up, Fix, Refresh
+            <>
+              <TouchableOpacity style={styles.action} onPress={() => onNavigate('topup')}>
+                <Text style={styles.actionIcon}>➕</Text>
+                <Text style={styles.actionLabel}>Top Up</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.action} onPress={handleFix}>
+                <Text style={styles.actionIcon}>🔧</Text>
+                <Text style={styles.actionLabel}>Fix</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.action} onPress={() => user && refresh(user.id)}>
+                <Text style={styles.actionIcon}>🔄</Text>
+                <Text style={styles.actionLabel}>Refresh</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         <View style={styles.transactionsSection}>
@@ -123,7 +150,13 @@ export function WalletScreen({ onNavigate }: Props) {
         </View>
       </ScrollView>
 
-      <BottomNav current="wallet" onNavigate={onNavigate} />
+      {/* Back button */}
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => onNavigate(user?.role === 'driver' ? 'driver-home' : 'home')}
+      >
+        <Text style={styles.backButtonText}>← Back to Home</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -147,6 +180,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
+  },
+  balanceCardDriver: {
+    backgroundColor: '#1E3A5F',
   },
   balanceLabel: {
     color: 'rgba(255,255,255,0.8)',
@@ -252,5 +288,17 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
     textTransform: 'capitalize',
+  },
+  backButton: {
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  backButtonText: {
+    fontSize: 16,
+    color: COLORS.primary,
+    fontWeight: '600',
   },
 });

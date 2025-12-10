@@ -4,4 +4,6 @@ export * from './users';
 export * from './wallets';
 export * from './transactions';
 export * from './paynow';
+export * from './rides';
+export * from './trips';
 

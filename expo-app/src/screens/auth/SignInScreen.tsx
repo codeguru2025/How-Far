@@ -29,7 +29,10 @@ export function SignInScreen({ onNavigate }: Props) {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView 
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.logo}>
           <Text style={styles.logoText}>NZ</Text>
         </View>
