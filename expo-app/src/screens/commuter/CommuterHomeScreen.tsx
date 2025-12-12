@@ -29,7 +29,8 @@ export function CommuterHomeScreen({ onNavigate }: Props) {
 
   useEffect(() => {
     loadData();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   async function loadData() {
     try {

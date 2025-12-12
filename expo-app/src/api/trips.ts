@@ -2,20 +2,8 @@
 // Works with existing trips schema (jsonb origin/destination)
 import { supabase } from './supabase';
 import { Trip, TripWaypoint, Booking, Location, VehicleType, TripStatus, BookingStatus, QRPaymentResult } from '../types';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiCache } from '../utils/apiCache';
-
-const AUTH_KEY = 'ndeip_user_session';
-
-async function getCurrentUser() {
-  try {
-    const data = await AsyncStorage.getItem(AUTH_KEY);
-    if (data) return JSON.parse(data);
-    return null;
-  } catch {
-    return null;
-  }
-}
+import { getCurrentUser } from '../utils/auth';
 
 // ============================================
 // DRIVER: Trip Management
@@ -104,7 +92,7 @@ export async function createTrip(params: CreateTripParams): Promise<{ success: b
 // Start trip (make it active/visible to riders)
 export async function startTrip(tripId: string): Promise<boolean> {
   try {
-    console.log('Starting trip:', tripId);
+    if (__DEV__) console.log('Starting trip:', tripId);
     const { data, error } = await supabase
       .from('trips')
       .update({ status: 'active' })
@@ -117,7 +105,7 @@ export async function startTrip(tripId: string): Promise<boolean> {
       return false;
     }
     
-    console.log('Trip started successfully:', data);
+    if (__DEV__) console.log('Trip started successfully:', data);
     // Invalidate cache so next fetch gets fresh data
     invalidateDriverTripCache();
     return true;
@@ -144,12 +132,21 @@ export async function beginTrip(tripId: string): Promise<boolean> {
 // Complete trip
 export async function completeTrip(tripId: string): Promise<boolean> {
   try {
+    // Complete the trip
     const { error } = await supabase
       .from('trips')
       .update({ status: 'completed' })
       .eq('id', tripId);
     
-    return !error;
+    if (error) return false;
+
+    // Archive all conversations for this trip
+    await supabase
+      .from('conversations')
+      .update({ status: 'archived' })
+      .eq('trip_id', tripId);
+    
+    return true;
   } catch {
     return false;
   }
@@ -243,7 +240,7 @@ export async function getDriverActiveTrip(forceRefresh: boolean = false): Promis
       .limit(1)
       .maybeSingle();
     
-    console.log('getDriverActiveTrip - trip:', data?.id, 'status:', data?.status, 'error:', error);
+    if (__DEV__) console.log('getDriverActiveTrip - trip:', data?.id, 'status:', data?.status, 'error:', error);
     
     if (data) {
       // Get bookings separately with commuter info
@@ -325,41 +322,52 @@ export async function updateTripLocation(tripId: string, location: Location): Pr
 
 // Find trips going in rider's direction
 export async function findTrips(origin: Location, destination: Location): Promise<any[]> {
-  try {
-    const { data, error } = await supabase.rpc('find_trips_by_direction', {
-      p_origin_lat: origin.latitude,
-      p_origin_lng: origin.longitude,
-      p_dest_lat: destination.latitude,
-      p_dest_lng: destination.longitude,
-      p_radius_km: 10,
-    });
+  // Create cache key based on rounded coordinates (for nearby searches)
+  const cacheKey = `find_trips_${origin.latitude.toFixed(3)}_${origin.longitude.toFixed(3)}_${destination.latitude.toFixed(3)}_${destination.longitude.toFixed(3)}`;
+  
+  // Use dedupe to prevent concurrent identical requests
+  return apiCache.dedupe(cacheKey, async () => {
+    try {
+      const { data, error } = await supabase.rpc('find_trips_by_direction', {
+        p_origin_lat: origin.latitude,
+        p_origin_lng: origin.longitude,
+        p_dest_lat: destination.latitude,
+        p_dest_lng: destination.longitude,
+        p_radius_km: 10,
+      });
 
-    if (error) {
+      if (error) {
+        console.error('Find trips error:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
       console.error('Find trips error:', error);
       return [];
     }
-
-    return data || [];
-  } catch (error) {
-    console.error('Find trips error:', error);
-    return [];
-  }
+  });
 }
 
 // Get trip details
 export async function getTripDetails(tripId: string): Promise<any | null> {
-  try {
-    const { data, error } = await supabase
-      .from('trips')
-      .select(`*, drivers (*), vehicles (*)`)
-      .eq('id', tripId)
-      .single();
+  const cacheKey = `trip_details_${tripId}`;
+  
+  // Use dedupe for concurrent requests
+  return apiCache.dedupe(cacheKey, async () => {
+    try {
+      const { data, error } = await supabase
+        .from('trips')
+        .select(`*, drivers (*), vehicles (*)`)
+        .eq('id', tripId)
+        .single();
 
-    if (error || !data) return null;
-    return data;
-  } catch {
-    return null;
-  }
+      if (error || !data) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  });
 }
 
 // Book a seat on a trip
@@ -367,10 +375,11 @@ export interface BookSeatParams {
   tripId: string;
   seats: number;
   pickupType: 'at_origin' | 'custom_pickup';
-  pickupLocation?: Location;
+  pickupLocation?: Location; // Rider's current/custom pickup location
   dropoffType: 'at_destination' | 'at_waypoint' | 'custom_dropoff';
   dropoffWaypointId?: string;
   dropoffLocation?: Location;
+  riderCurrentLocation?: Location; // For auto-captured location
 }
 
 export async function bookSeat(params: BookSeatParams): Promise<{ success: boolean; booking?: any; error?: string }> {
@@ -401,7 +410,7 @@ export async function bookSeat(params: BookSeatParams): Promise<{ success: boole
     const dropoffFee = params.dropoffType === 'custom_dropoff' ? 1 : 0; // $1 extra for custom dropoff
     const totalAmount = baseAmount + pickupFee + dropoffFee;
     
-    console.log('bookSeat - pricing:', { baseFare, seatsToBook, baseAmount, totalAmount });
+    if (__DEV__) console.log('bookSeat - pricing:', { baseFare, seatsToBook, baseAmount, totalAmount });
 
     // Check rider's wallet balance (need total + 2.5% fee)
     const { data: wallet } = await supabase
@@ -420,21 +429,40 @@ export async function bookSeat(params: BookSeatParams): Promise<{ success: boole
       };
     }
 
+    // Determine pickup location (use rider's current location if available)
+    const pickupLocation = params.pickupLocation || params.riderCurrentLocation;
+    
     // Create booking (matching actual table columns)
+    const bookingData: any = {
+      trip_id: params.tripId,
+      commuter_id: user.id,
+      seats: seatsToBook,
+      fare: totalAmount > 0 ? totalAmount : baseFare, // Ensure fare is never null/0
+      status: 'pending',
+      payment_status: 'pending',
+    };
+    
+    // Add pickup location if available
+    if (pickupLocation) {
+      bookingData.pickup_latitude = pickupLocation.latitude;
+      bookingData.pickup_longitude = pickupLocation.longitude;
+      bookingData.pickup_address = pickupLocation.address || pickupLocation.name;
+    }
+    
+    // Add dropoff location if custom
+    if (params.dropoffLocation) {
+      bookingData.dropoff_latitude = params.dropoffLocation.latitude;
+      bookingData.dropoff_longitude = params.dropoffLocation.longitude;
+      bookingData.dropoff_address = params.dropoffLocation.address || params.dropoffLocation.name;
+    }
+    
     const { data: booking, error: bookingError } = await supabase
       .from('bookings')
-      .insert({
-        trip_id: params.tripId,
-        commuter_id: user.id,
-        seats: seatsToBook,
-        fare: totalAmount > 0 ? totalAmount : baseFare, // Ensure fare is never null/0
-        status: 'pending',
-        payment_status: 'pending',
-      })
+      .insert(bookingData)
       .select()
       .single();
     
-    console.log('bookSeat - insert result:', booking, bookingError);
+    if (__DEV__) console.log('bookSeat - insert result:', booking, bookingError);
 
     if (bookingError) {
       console.error('Book seat error:', bookingError);
@@ -489,7 +517,7 @@ export async function getRiderActiveBooking(): Promise<any | null> {
       .limit(1)
       .maybeSingle();
 
-    console.log('getRiderActiveBooking - booking:', data, 'error:', error);
+    if (__DEV__) console.log('getRiderActiveBooking - booking:', data, 'error:', error);
 
     if (error || !data) return null;
     
@@ -517,16 +545,29 @@ export async function getRiderActiveBooking(): Promise<any | null> {
 // Accept/Confirm a booking
 export async function confirmBooking(bookingId: string): Promise<boolean> {
   try {
+    // Fetch booking with trip data
     const { data: booking, error: fetchError } = await supabase
       .from('bookings')
-      .select('*, trips(*)')
+      .select('id, seats, trip_id')
       .eq('id', bookingId)
       .single();
 
     if (fetchError || !booking) return false;
 
+    // Get trip separately to avoid join issues
+    const { data: trip } = await supabase
+      .from('trips')
+      .select('seats_available')
+      .eq('id', booking.trip_id)
+      .single();
+
+    if (!trip) return false;
+
+    // Use 'seats' column (actual schema) with fallback
+    const seatsToBook = booking.seats || 1;
+
     // Check seats available
-    if (booking.trips.seats_available < booking.seats_booked) {
+    if (trip.seats_available < seatsToBook) {
       return false;
     }
 
@@ -541,11 +582,8 @@ export async function confirmBooking(bookingId: string): Promise<boolean> {
     // Reduce available seats
     await supabase
       .from('trips')
-      .update({ seats_available: booking.trips.seats_available - booking.seats_booked })
+      .update({ seats_available: trip.seats_available - seatsToBook })
       .eq('id', booking.trip_id);
-
-    // Generate QR token
-    await supabase.rpc('generate_booking_qr_token', { p_booking_id: bookingId });
 
     return true;
   } catch {
@@ -600,7 +638,7 @@ export async function getBookingQRCode(bookingId: string): Promise<{ qrToken: st
       .eq('id', bookingId)
       .single();
 
-    console.log('getBookingQRCode - booking:', data, 'error:', error);
+    if (__DEV__) console.log('getBookingQRCode - booking:', data, 'error:', error);
 
     if (error || !data) return null;
 

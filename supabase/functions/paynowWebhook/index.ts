@@ -52,20 +52,30 @@ serve(async (req: Request) => {
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const expectedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 
-    // Log hash comparison for debugging
+    // Log hash comparison for debugging (only first 16 chars for security)
     console.log("Hash verification:", {
-      received: hash?.substring(0, 16),
-      expected: expectedHash.substring(0, 16),
+      received: hash?.substring(0, 16) + "...",
+      expected: expectedHash.substring(0, 16) + "...",
       integrationKeySet: !!integrationKey,
       match: hash?.toUpperCase() === expectedHash
     });
 
-    // TEMPORARY: Allow requests even if hash doesn't match (for debugging)
-    // TODO: Re-enable strict verification after debugging
+    // SECURITY: Verify hash to prevent forged webhook requests
+    // Only proceed if hash matches or if in development mode
+    const isDevelopment = Deno.env.get("ENVIRONMENT") === "development";
+    
     if (!hash) {
-      console.warn("No hash provided - proceeding anyway for debugging");
+      console.error("SECURITY: No hash provided in webhook request");
+      if (!isDevelopment) {
+        return new Response("Invalid request: missing hash", { status: 401 });
+      }
+      console.warn("DEV MODE: Proceeding without hash for debugging");
     } else if (hash.toUpperCase() !== expectedHash) {
-      console.warn("Hash mismatch - proceeding anyway for debugging");
+      console.error("SECURITY: Hash verification failed");
+      if (!isDevelopment) {
+        return new Response("Invalid request: hash mismatch", { status: 401 });
+      }
+      console.warn("DEV MODE: Proceeding despite hash mismatch for debugging");
     } else {
       console.log("Hash verified successfully!");
     }

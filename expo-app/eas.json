@@ -5,17 +5,15 @@
   },
   "build": {
     "base": {
-      "node": "20.18.0",
-      "env": {
-        "NPM_TOKEN": ""
-      }
+      "node": "20.18.0"
     },
     "development": {
       "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "resourceClass": "m-medium"
       },
       "android": {
         "buildType": "apk",
@@ -30,6 +28,9 @@
       "extends": "base",
       "distribution": "internal",
       "channel": "preview",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -42,8 +43,13 @@
       "extends": "base",
       "channel": "production",
       "autoIncrement": true,
+      "ios": {
+        "resourceClass": "m-medium",
+        "credentialsSource": "remote"
+      },
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
       },
       "env": {
         "APP_ENV": "production",
@@ -54,14 +60,15 @@
   "submit": {
     "production": {
       "android": {
-        "serviceAccountKeyPath": "./google-services.json",
-        "track": "internal"
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal",
+        "releaseStatus": "completed"
       },
       "ios": {
-        "appleId": "your-apple-id@example.com",
-        "ascAppId": "your-app-store-connect-app-id"
+        "appleId": "ausiziba@gmail.com",
+        "ascAppId": "6756439561",
+        "appleTeamId": "RB9J5T363R"
       }
     }
   }
 }
-

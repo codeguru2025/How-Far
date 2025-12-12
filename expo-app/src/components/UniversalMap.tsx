@@ -14,6 +14,7 @@ import GoogleMapView, {
   PROVIDER_GOOGLE,
   Region,
   MapType,
+  EdgePadding,
 } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { useMapContext, MapStyle } from '../context/MapContext';
@@ -56,7 +57,7 @@ interface UniversalMapProps {
 }
 
 export interface UniversalMapRef {
-  fitToCoordinates: (coords: Coordinate[], padding?: object) => void;
+  fitToCoordinates: (coords: Coordinate[], padding?: EdgePadding) => void;
   animateToRegion: (region: Region, duration?: number) => void;
 }
 
@@ -90,7 +91,7 @@ export const UniversalMap = forwardRef<UniversalMapRef, UniversalMapProps>(
     const [showStyleModal, setShowStyleModal] = useState(false);
 
     useImperativeHandle(ref, () => ({
-      fitToCoordinates: (coords: Coordinate[], padding = { top: 50, right: 50, bottom: 50, left: 50 }) => {
+      fitToCoordinates: (coords: Coordinate[], padding: EdgePadding = { top: 50, right: 50, bottom: 50, left: 50 }) => {
         if (googleMapRef.current) {
           googleMapRef.current.fitToCoordinates(coords, {
             edgePadding: padding,

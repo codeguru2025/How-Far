@@ -1,15 +1,17 @@
 // Splash Screen
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image } from 'react-native';
 import { COLORS } from '../theme';
 
 export function SplashScreen() {
   return (
     <View style={styles.container}>
-      <View style={styles.logo}>
-        <Text style={styles.logoText}>NZ</Text>
-      </View>
-      <Text style={styles.title}>Ndeip-Zthin</Text>
+      <Image 
+        source={require('../../assets/splash-icon.png')} 
+        style={styles.logo}
+        resizeMode="contain"
+      />
+      <Text style={styles.title}>How Far</Text>
       <Text style={styles.subtitle}>Your ride, your way</Text>
       <ActivityIndicator size="large" color="#FFFFFF" style={styles.loader} />
     </View>
@@ -24,21 +26,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logo: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 150,
+    height: 150,
     marginBottom: 24,
   },
-  logoText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
   title: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },

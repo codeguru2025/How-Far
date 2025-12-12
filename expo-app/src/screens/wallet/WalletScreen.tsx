@@ -19,7 +19,8 @@ export function WalletScreen({ onNavigate }: Props) {
     if (user) {
       refresh(user.id);
     }
-  }, [user]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   async function handleFix() {
     if (!user) return;

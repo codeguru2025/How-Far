@@ -13,17 +13,74 @@ import QRCode from 'react-native-qrcode-svg';
 import { COLORS } from '../../theme';
 import { Screen } from '../../types';
 import { Button } from '../../components';
-import { useTripStore } from '../../stores';
+import { useTripStore, useAuthStore } from '../../stores';
 import { getBookingQRCode, subscribeToBooking } from '../../api/trips';
+import { getOrCreateConversation } from '../../api/messaging';
 
 interface Props {
-  onNavigate: (screen: Screen) => void;
+  onNavigate: (screen: Screen, params?: any) => void;
 }
 
 export function ShowQRScreen({ onNavigate }: Props) {
-  const { activeBooking, setActiveBooking } = useTripStore();
+  const { activeBooking, setActiveBooking, selectedTrip } = useTripStore();
+  const { user } = useAuthStore();
   const [qrData, setQrData] = useState<{ qrToken: string; bookingData: any } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOpeningChat, setIsOpeningChat] = useState(false);
+
+  async function handleMessageDriver() {
+    if (!activeBooking || !user) {
+      Alert.alert('Error', 'Cannot open chat - booking details not found');
+      return;
+    }
+
+    setIsOpeningChat(true);
+    try {
+      // Get driver ID from booking's trip data or selectedTrip
+      let driverId = selectedTrip?.owner_id || selectedTrip?.driver_id;
+      
+      // If selectedTrip not available, fetch driver from booking's trip
+      if (!driverId && activeBooking.trip_id) {
+        const { supabase } = await import('../../api/supabase');
+        const { data: trip } = await supabase
+          .from('trips')
+          .select('owner_id')
+          .eq('id', activeBooking.trip_id)
+          .single();
+        driverId = trip?.owner_id;
+      }
+
+      if (!driverId) {
+        Alert.alert('Error', 'Driver information not found');
+        return;
+      }
+
+      const { conversation, error } = await getOrCreateConversation(
+        activeBooking.id,
+        activeBooking.trip_id,
+        driverId,
+        user.id
+      );
+
+      if (error || !conversation) {
+        console.error('Chat error:', error);
+        Alert.alert('Error', error || 'Could not open chat');
+        return;
+      }
+
+      // Navigate to chat
+      onNavigate('chat', {
+        conversationId: conversation.id,
+        otherUserName: 'Driver',
+        isDriver: false,
+      });
+    } catch (error: any) {
+      console.error('Open chat error:', error);
+      Alert.alert('Error', error?.message || 'Failed to open chat');
+    } finally {
+      setIsOpeningChat(false);
+    }
+  }
 
   useEffect(() => {
     loadQRCode();
@@ -48,6 +105,7 @@ export function ShowQRScreen({ onNavigate }: Props) {
     return () => {
       if (unsubscribe) unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeBooking?.id]);
 
   async function loadQRCode() {
@@ -157,6 +215,24 @@ export function ShowQRScreen({ onNavigate }: Props) {
         </View>
       </View>
 
+      {/* Vehicle Info - Help rider identify the car */}
+      {selectedTrip?.vehicle_info && (
+        <View style={styles.vehicleCard}>
+          <Text style={styles.vehicleTitle}>🚗 Look for this vehicle:</Text>
+          <View style={styles.vehicleDetails}>
+            <Text style={styles.vehicleMake}>
+              {selectedTrip.vehicle_info.make} {selectedTrip.vehicle_info.model}
+            </Text>
+            <Text style={styles.vehicleColor}>
+              {selectedTrip.vehicle_info.color}
+            </Text>
+            <Text style={styles.vehiclePlate}>
+              {selectedTrip.vehicle_info.registration_number}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Status */}
       <View style={styles.statusContainer}>
         <View style={styles.statusDot} />
@@ -176,6 +252,14 @@ export function ShowQRScreen({ onNavigate }: Props) {
         title="🗺️ View Driver on Map"
         onPress={() => onNavigate('rider-map')}
         style={styles.mapButton}
+      />
+
+      {/* Message Driver Button */}
+      <Button
+        title={isOpeningChat ? "Opening..." : "💬 Message Driver"}
+        onPress={handleMessageDriver}
+        disabled={isOpeningChat}
+        style={styles.messageButton}
       />
 
       {/* Back Button */}
@@ -329,6 +413,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.primary,
   },
+  vehicleCard: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  vehicleTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 8,
+  },
+  vehicleDetails: {
+    alignItems: 'center',
+  },
+  vehicleMake: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#78350F',
+  },
+  vehicleColor: {
+    fontSize: 14,
+    color: '#92400E',
+    marginTop: 4,
+  },
+  vehiclePlate: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#78350F',
+    backgroundColor: '#FDE68A',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 8,
+    letterSpacing: 1,
+  },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -367,6 +489,11 @@ const styles = StyleSheet.create({
   mapButton: {
     marginHorizontal: 20,
     marginTop: 16,
+  },
+  messageButton: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    backgroundColor: '#3B82F6',
   },
   homeButton: {
     marginHorizontal: 20,

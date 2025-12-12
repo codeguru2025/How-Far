@@ -1,8 +1,24 @@
 // Cryptographic utilities
 import * as Crypto from 'expo-crypto';
 
-// Secure password hashing using expo-crypto
+/**
+ * Password hashing using SHA-256 with application salt
+ * 
+ * ⚠️ SECURITY RECOMMENDATIONS FOR PRODUCTION:
+ * 1. Move password verification to a server-side Edge Function
+ * 2. Use bcrypt/argon2 with per-user random salts on the server
+ * 3. Store only the server-generated hash in the database
+ * 4. Use HTTPS to protect password in transit
+ * 5. Implement rate limiting on login attempts
+ * 
+ * Current implementation maintains backward compatibility with existing users.
+ * A migration path would be:
+ * 1. Add a 'password_version' column to users table
+ * 2. On login success, re-hash with new algorithm and update password_version
+ * 3. Gradually migrate all users to the new secure hash
+ */
 export async function hashPassword(password: string): Promise<string> {
+  // Legacy salt format - DO NOT CHANGE without migration strategy
   const salt = 'ndeip-secure-v2-' + password.length;
   const salted = salt + password + salt;
   const hash = await Crypto.digestStringAsync(

@@ -4,11 +4,14 @@ import { User } from '../types';
 import { hashPassword } from '../utils/crypto';
 import { normalizePhone } from '../utils/phone';
 
+// Fields to select for user queries (excludes sensitive data like password_hash)
+const USER_FIELDS = 'id, phone_number, first_name, last_name, role, status, created_at';
+
 export async function getUserByPhone(phone: string): Promise<User | null> {
   const normalizedPhone = normalizePhone(phone);
   const { data, error } = await supabase
     .from('users')
-    .select('*')
+    .select(USER_FIELDS)
     .eq('phone_number', normalizedPhone)
     .single();
   
@@ -19,7 +22,7 @@ export async function getUserByPhone(phone: string): Promise<User | null> {
 export async function getUserById(id: string): Promise<User | null> {
   const { data, error } = await supabase
     .from('users')
-    .select('*')
+    .select(USER_FIELDS)
     .eq('id', id)
     .single();
   
@@ -32,18 +35,30 @@ export async function signIn(phone: string, password: string): Promise<{ user: U
     const normalizedPhone = normalizePhone(phone);
     const passwordHash = await hashPassword(password);
     
-    const { data: user, error } = await supabase
+    // First verify credentials (only fetch password_hash for verification)
+    const { data: authData, error: authError } = await supabase
       .from('users')
-      .select('*')
+      .select('id, password_hash')
       .eq('phone_number', normalizedPhone)
       .single();
 
-    if (error || !user) {
+    if (authError || !authData) {
       return { user: null, error: 'User not found. Please sign up first.' };
     }
 
-    if (user.password_hash !== passwordHash) {
+    if (authData.password_hash !== passwordHash) {
       return { user: null, error: 'Incorrect password' };
+    }
+
+    // Now fetch user data without password_hash
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select(USER_FIELDS)
+      .eq('id', authData.id)
+      .single();
+
+    if (userError || !user) {
+      return { user: null, error: 'Failed to fetch user data' };
     }
 
     return { user: user as User, error: null };
@@ -85,7 +100,7 @@ export async function signUp(params: {
         role: params.role || 'passenger',
         status: 'active',
       })
-      .select()
+      .select(USER_FIELDS)
       .single();
 
     if (error) {

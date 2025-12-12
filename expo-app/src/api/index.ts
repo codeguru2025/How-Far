@@ -6,4 +6,6 @@ export * from './transactions';
 export * from './paynow';
 export * from './rides';
 export * from './trips';
-
+export * from './messaging';
+export * from './otp';
+export * from './admin';

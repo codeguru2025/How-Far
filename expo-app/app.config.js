@@ -14,22 +14,22 @@ const IS_PROD = process.env.APP_ENV === 'production' || (!IS_DEV && !IS_PREVIEW)
 const getAppConfig = () => {
   if (IS_DEV) {
     return {
-      name: 'Ndeip-Zthin (Dev)',
-      bundleIdentifier: 'com.ndeip.zthin.dev',
-      package: 'com.ndeip.zthin.dev',
+      name: 'How Far (Dev)',
+      bundleIdentifier: 'com.howfar.app.dev',
+      package: 'com.howfar.app.dev',
     };
   }
   if (IS_PREVIEW) {
     return {
-      name: 'Ndeip-Zthin (Preview)',
-      bundleIdentifier: 'com.ndeip.zthin.preview',
-      package: 'com.ndeip.zthin.preview',
+      name: 'How Far (Preview)',
+      bundleIdentifier: 'com.howfar.app.preview',
+      package: 'com.howfar.app.preview',
     };
   }
   return {
-    name: 'Ndeip-Zthin',
-    bundleIdentifier: 'com.ndeip.zthin',
-    package: 'com.ndeip.zthin',
+    name: 'How Far',
+    bundleIdentifier: 'com.howfar.app',
+    package: 'com.howfar.app',
   };
 };
 
@@ -42,7 +42,7 @@ module.exports = ({ config }) => {
   return {
     ...config,
     name: appConfig.name,
-    slug: 'ndeip-zthin',
+    slug: 'how-far',
     version: process.env.APP_VERSION || config.version || '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
@@ -51,6 +51,7 @@ module.exports = ({ config }) => {
     
     // Splash screen
     splash: {
+      image: './assets/splash-icon.png',
       backgroundColor: '#E85A24',
       resizeMode: 'contain',
     },
@@ -64,15 +65,22 @@ module.exports = ({ config }) => {
       infoPlist: {
         LSApplicationQueriesSchemes: ['innbucks', 'schinn.wbpycode'],
         NSLocationWhenInUseUsageDescription: 
-          'This app needs your location to show nearby places and calculate ride routes.',
+          'How Far needs your location to show nearby rides and calculate routes to your destination.',
         NSLocationAlwaysAndWhenInUseUsageDescription: 
-          'This app needs your location to track rides in progress.',
+          'How Far uses your location to track rides in progress and provide accurate arrival times.',
         NSCameraUsageDescription:
-          'This app needs camera access to scan QR codes for payments.',
+          'How Far needs camera access to scan QR codes for secure payments between riders and drivers.',
+        NSPhotoLibraryUsageDescription:
+          'How Far may need access to your photos to upload profile pictures.',
+        NSMicrophoneUsageDescription:
+          'How Far may need microphone access for voice features.',
       },
       config: {
         googleMapsApiKey: googleMapsApiKey,
       },
+      associatedDomains: [
+        'applinks:howfar.app',
+      ],
     },
     
     // Android configuration
@@ -88,6 +96,9 @@ module.exports = ({ config }) => {
         'ACCESS_FINE_LOCATION',
         'ACCESS_COARSE_LOCATION',
         'CAMERA',
+        'READ_EXTERNAL_STORAGE',
+        'WRITE_EXTERNAL_STORAGE',
+        'VIBRATE',
       ],
       config: {
         googleMaps: {
@@ -102,22 +113,9 @@ module.exports = ({ config }) => {
       bundler: 'metro',
     },
     
-    // Plugins
+    // Plugins - use from app.json and add any dynamic ones
     plugins: [
-      'expo-secure-store',
-      [
-        'expo-location',
-        {
-          locationAlwaysAndWhenInUsePermission: 
-            'Allow Ndeip-Zthin to use your location for ride tracking.',
-        },
-      ],
-      [
-        'expo-camera',
-        {
-          cameraPermission: 'Allow Ndeip-Zthin to use your camera to scan QR codes.',
-        },
-      ],
+      ...(config.plugins || []),
     ],
     
     // Extra runtime config (accessible in app)
@@ -127,7 +125,7 @@ module.exports = ({ config }) => {
       isPreviewBuild: IS_PREVIEW,
       buildDate: new Date().toISOString(),
       eas: {
-        projectId: process.env.EAS_PROJECT_ID || 'your-eas-project-id',
+        projectId: process.env.EAS_PROJECT_ID || '00b90bb5-eadd-443f-8c0d-3c93a41b2222',
       },
     },
     
@@ -135,7 +133,7 @@ module.exports = ({ config }) => {
     updates: {
       enabled: !IS_DEV,
       fallbackToCacheTimeout: 30000,
-      url: 'https://u.expo.dev/your-project-id',
+      url: 'https://u.expo.dev/00b90bb5-eadd-443f-8c0d-3c93a41b2222',
     },
     
     // Runtime version for OTA updates
@@ -144,4 +142,3 @@ module.exports = ({ config }) => {
     },
   };
 };
-

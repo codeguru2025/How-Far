@@ -37,7 +37,8 @@ export function DriverHomeScreen({ onNavigate }: Props) {
 
   useEffect(() => {
     loadData();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   async function loadData() {
     try {
@@ -48,22 +49,54 @@ export function DriverHomeScreen({ onNavigate }: Props) {
       // Get driver info
       const { data: driver } = await supabase
         .from('drivers')
-        .select('is_online, total_rides, total_earnings, rating')
+        .select('id, is_online, total_rides, rating')
         .eq('user_id', user?.id)
         .single();
       
       if (driver) {
         setIsOnline(driver.is_online);
+        
+        // Get trips for this driver
+        const { data: driverTrips } = await supabase
+          .from('trips')
+          .select('id')
+          .eq('driver_id', driver.id);
+        
+        const tripIds = driverTrips?.map(t => t.id) || [];
+        
+        let totalEarned = 0;
+        let ridesCount = 0;
+        
+        if (tripIds.length > 0) {
+          // Calculate actual earnings from paid bookings
+          const { data: paidBookings } = await supabase
+            .from('bookings')
+            .select('fare, status')
+            .in('trip_id', tripIds)
+            .eq('payment_status', 'paid');
+          
+          totalEarned = paidBookings?.reduce((sum, b) => sum + (b.fare || 0), 0) || 0;
+          
+          // Get completed rides count
+          const { data: completedBookings } = await supabase
+            .from('bookings')
+            .select('id')
+            .in('trip_id', tripIds)
+            .in('status', ['completed', 'picked_up']);
+          
+          ridesCount = completedBookings?.length || 0;
+        }
+        
         setStats({
-          totalRides: driver.total_rides || 0,
-          totalEarnings: driver.total_earnings || 0,
+          totalRides: ridesCount || driver.total_rides || 0,
+          totalEarnings: totalEarned,
           rating: driver.rating || 5.0,
         });
       }
 
       // Get active trip
       const trip = await getDriverActiveTrip();
-      console.log('DriverHomeScreen - activeTrip:', trip?.id, trip?.status);
+      if (__DEV__) console.log('DriverHomeScreen - activeTrip:', trip?.id, trip?.status);
       setActiveTrip(trip);
     } catch (error) {
       console.error('Load data error:', error);
@@ -190,6 +223,17 @@ export function DriverHomeScreen({ onNavigate }: Props) {
               <Text style={styles.scanButtonText}>📷 Scan QR</Text>
             </TouchableOpacity>
           </View>
+          
+          {/* Start Trip Button - shown when passengers confirmed */}
+          {confirmedBookings > 0 && (
+            <TouchableOpacity 
+              style={styles.startTripButton}
+              onPress={() => onNavigate('trip-active')}
+            >
+              <Text style={styles.startTripIcon}>🚀</Text>
+              <Text style={styles.startTripText}>Start Trip with {confirmedBookings} Passenger(s)</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         /* Create Trip Card */
@@ -233,12 +277,12 @@ export function DriverHomeScreen({ onNavigate }: Props) {
 
         <TouchableOpacity 
           style={styles.quickAction}
-          onPress={() => onNavigate('wallet')}
+          onPress={() => onNavigate('withdraw')}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: '#FEF3C7' }]}>
-            <Text style={styles.quickActionEmoji}>💰</Text>
+          <View style={[styles.quickActionIcon, { backgroundColor: '#D1FAE5' }]}>
+            <Text style={styles.quickActionEmoji}>💵</Text>
           </View>
-          <Text style={styles.quickActionText}>Earnings</Text>
+          <Text style={styles.quickActionText}>Withdraw</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -249,6 +293,21 @@ export function DriverHomeScreen({ onNavigate }: Props) {
             <Text style={styles.quickActionEmoji}>👤</Text>
           </View>
           <Text style={styles.quickActionText}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Settings Row */}
+      <View style={styles.settingsRow}>
+        <TouchableOpacity 
+          style={styles.settingsAction}
+          onPress={() => onNavigate('language-settings')}
+        >
+          <Text style={styles.settingsActionIcon}>🌍</Text>
+          <View style={styles.settingsActionInfo}>
+            <Text style={styles.settingsActionTitle}>Language & Announcements</Text>
+            <Text style={styles.settingsActionSubtitle}>Shona, Ndebele, English • Voice settings</Text>
+          </View>
+          <Text style={styles.settingsArrow}>→</Text>
         </TouchableOpacity>
       </View>
 
@@ -532,6 +591,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.error,
     fontWeight: '500',
+  },
+  startTripButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 14,
+    gap: 10,
+  },
+  startTripIcon: {
+    fontSize: 20,
+  },
+  startTripText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  settingsRow: {
+    paddingHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  settingsAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  settingsActionIcon: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  settingsActionInfo: {
+    flex: 1,
+  },
+  settingsActionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  settingsActionSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  settingsArrow: {
+    fontSize: 18,
+    color: COLORS.textSecondary,
   },
 });
 

@@ -1,10 +1,8 @@
 // Auth Store - Zustand
 import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import * as usersApi from '../api/users';
-
-const AUTH_KEY = 'ndeip_user_session';
+import { saveUserSession, clearUserSession, getCurrentUser } from '../utils/auth';
 
 interface AuthState {
   user: User | null;
@@ -26,10 +24,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
-      const data = await AsyncStorage.getItem(AUTH_KEY);
-      if (data) {
-        const savedUser = JSON.parse(data);
-        // Verify user still exists
+      const savedUser = await getCurrentUser();
+      if (savedUser) {
+        // Verify user still exists in DB
         const freshUser = await usersApi.getUserById(savedUser.id);
         if (freshUser) {
           set({ user: freshUser, isAuthenticated: true, isLoading: false });
@@ -47,7 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const result = await usersApi.signIn(phone, password);
     
     if (result.user) {
-      await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(result.user));
+      await saveUserSession(result.user);
       set({ user: result.user, isAuthenticated: true, isLoading: false });
       return { success: true };
     }
@@ -61,7 +58,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const result = await usersApi.signUp(params);
     
     if (result.user) {
-      await AsyncStorage.setItem(AUTH_KEY, JSON.stringify(result.user));
+      await saveUserSession(result.user);
       set({ user: result.user, isAuthenticated: true, isLoading: false });
       return { success: true };
     }
@@ -71,7 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await AsyncStorage.removeItem(AUTH_KEY);
+    await clearUserSession();
     set({ user: null, isAuthenticated: false });
   },
 
@@ -80,7 +77,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (user) {
       const updatedUser = { ...user, ...updates };
       set({ user: updatedUser });
-      AsyncStorage.setItem(AUTH_KEY, JSON.stringify(updatedUser));
+      saveUserSession(updatedUser);
     }
   },
 }));

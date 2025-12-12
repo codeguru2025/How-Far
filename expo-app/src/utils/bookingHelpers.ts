@@ -2,6 +2,7 @@
 // Handles both old and new database column naming conventions
 
 import { Booking, User } from '../types';
+import { CONFIG } from '../config';
 
 /**
  * Get the rider/commuter ID from a booking (handles both column names)
@@ -43,31 +44,31 @@ export function getRiderName(booking: Booking): string {
 }
 
 /**
- * Calculate the rider service fee (2.5%)
+ * Calculate the rider service fee (uses CONFIG.FEES.RIDER_FEE_PERCENT)
  */
 export function calculateRiderFee(fare: number): number {
-  return Math.round(fare * 0.025 * 100) / 100;
+  return Math.round(fare * CONFIG.FEES.RIDER_FEE_PERCENT * 100) / 100;
 }
 
 /**
- * Calculate the driver platform fee (7.5%)
+ * Calculate the driver platform fee (uses CONFIG.FEES.DRIVER_FEE_PERCENT)
  */
 export function calculateDriverFee(fare: number): number {
-  return Math.round(fare * 0.075 * 100) / 100;
+  return Math.round(fare * CONFIG.FEES.DRIVER_FEE_PERCENT * 100) / 100;
 }
 
 /**
  * Calculate driver's earnings after platform fee
  */
 export function calculateDriverEarnings(fare: number): number {
-  return Math.round(fare * 0.925 * 100) / 100;
+  return Math.round(fare * (1 - CONFIG.FEES.DRIVER_FEE_PERCENT) * 100) / 100;
 }
 
 /**
  * Calculate total rider pays (fare + rider fee)
  */
 export function calculateTotalRiderPays(fare: number): number {
-  return Math.round(fare * 1.025 * 100) / 100;
+  return Math.round(fare * (1 + CONFIG.FEES.RIDER_FEE_PERCENT) * 100) / 100;
 }
 
 /**
@@ -112,4 +113,6 @@ export function isAwaitingPayment(booking: Booking): boolean {
   return booking.status === 'confirmed' && 
          (booking.payment_status === 'pending' || !booking.payment_status);
 }
+
+
 

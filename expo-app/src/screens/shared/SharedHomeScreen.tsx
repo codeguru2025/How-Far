@@ -225,7 +225,7 @@ function RiderHomeContent({
             {activeBooking.trip?.origin?.address} → {activeBooking.trip?.destination?.address}
           </Text>
           <Text style={styles.activeCardPrice}>
-            ${activeBooking.total_amount?.toFixed(2)} • {activeBooking.seats_booked} seat(s)
+            ${(activeBooking.fare ?? activeBooking.total_amount ?? 0).toFixed(2)} • {activeBooking.seats ?? activeBooking.seats_booked ?? 1} seat(s)
           </Text>
         </View>
 

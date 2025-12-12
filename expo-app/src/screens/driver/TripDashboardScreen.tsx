@@ -14,15 +14,50 @@ import { Screen, Trip, Booking } from '../../types';
 import { Button } from '../../components';
 import { getDriverActiveTrip, completeTrip } from '../../api/trips';
 import { supabase } from '../../api/supabase';
+import { getOrCreateConversation } from '../../api/messaging';
+import { useAuthStore } from '../../stores';
 
 interface Props {
-  onNavigate: (screen: Screen) => void;
+  onNavigate: (screen: Screen, params?: any) => void;
 }
 
 export function TripDashboardScreen({ onNavigate }: Props) {
+  const { user } = useAuthStore();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  async function handleMessageRider(booking: Booking) {
+    if (!trip || !user || !booking.commuter_id) {
+      Alert.alert('Error', 'Cannot open chat');
+      return;
+    }
+
+    try {
+      const { conversation, error } = await getOrCreateConversation(
+        booking.id,
+        trip.id,
+        user.id,
+        booking.commuter_id
+      );
+
+      if (error || !conversation) {
+        console.error('Chat error:', error);
+        Alert.alert('Error', error || 'Could not open chat');
+        return;
+      }
+
+      const riderName = booking.rider?.first_name || 'Rider';
+      onNavigate('chat', {
+        conversationId: conversation.id,
+        otherUserName: riderName,
+        isDriver: true,
+      });
+    } catch (error) {
+      console.error('Open chat error:', error);
+      Alert.alert('Error', 'Failed to open chat');
+    }
+  }
 
   useEffect(() => {
     loadTrip();
@@ -327,6 +362,12 @@ export function TripDashboardScreen({ onNavigate }: Props) {
                     {booking.status === 'picked_up' ? '🚗 Picked up' : '⏳ Waiting for pickup'}
                   </Text>
                 </View>
+                <TouchableOpacity 
+                  style={styles.messageButton}
+                  onPress={() => handleMessageRider(booking)}
+                >
+                  <Text style={styles.messageButtonText}>💬</Text>
+                </TouchableOpacity>
               </View>
             ))}
           </View>
@@ -597,10 +638,24 @@ const styles = StyleSheet.create({
     color: '#047857',
   },
   confirmedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#D1FAE5',
     borderRadius: 14,
     padding: 16,
     marginBottom: 10,
+  },
+  messageButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#3B82F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  messageButtonText: {
+    fontSize: 20,
   },
   noBookings: {
     alignItems: 'center',

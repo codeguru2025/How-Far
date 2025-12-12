@@ -40,7 +40,7 @@ export function ScanQRScreen({ onNavigate }: Props) {
     try {
       // Parse the QR code data
       const qrData = JSON.parse(data);
-      console.log('Scanned QR data:', qrData);
+      if (__DEV__) console.log('Scanned QR data:', qrData);
       
       if (qrData.token && qrData.bookingId) {
         await processPayment(qrData.bookingId, qrData.amount || 0);

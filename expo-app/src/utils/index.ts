@@ -1,6 +1,16 @@
 // Utils - Consolidated exports
 // All utility functions should be exported from here
 
+// Auth Utilities
+export {
+  AUTH_KEY,
+  getCurrentUser,
+  isAuthenticated,
+  getCurrentUserId,
+  saveUserSession,
+  clearUserSession,
+} from './auth';
+
 // API Caching & Performance
 export { apiCache, debounce, throttle } from './apiCache';
 
@@ -47,4 +57,29 @@ export {
   checkPayNow,
 } from './healthCheck';
 export type { HealthCheckResult, HealthReport } from './healthCheck';
+
+// Location Utilities
+export {
+  getCurrentLocation,
+  reverseGeocode,
+  calculateDistance,
+  optimizePickupRoute,
+  getOptimizedDirections,
+} from './location';
+export type { LocationResult, PickupPoint, OptimizedRoute } from './location';
+
+// Input Validation
+export {
+  validatePhone,
+  validatePassword,
+  validateAmount,
+  validateTopUpAmount,
+  validateName,
+  validateSeats,
+  validateCoordinates,
+  validateUUID,
+  validateSignInData,
+  validateSignUpData,
+} from './validation';
+export type { ValidationResult } from './validation';
 

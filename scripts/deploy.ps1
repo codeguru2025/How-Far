@@ -27,18 +27,29 @@ if (-not (Get-Command "supabase" -ErrorAction SilentlyContinue)) {
 # Deploy Supabase Functions
 Write-Host "📦 Deploying Supabase Edge Functions..." -ForegroundColor Cyan
 
-$functions = @(
-    "paynowWebhook",
-    "creditWallet",
-    "reconcilePayments"
-)
+# Get all function directories (excluding _shared)
+$functionsPath = Join-Path $PSScriptRoot "..\supabase\functions"
+$functions = Get-ChildItem -Path $functionsPath -Directory | 
+    Where-Object { $_.Name -ne "_shared" } | 
+    Select-Object -ExpandProperty Name
+
+Write-Host "  Found $($functions.Count) functions to deploy" -ForegroundColor Gray
 
 foreach ($fn in $functions) {
     Write-Host "  Deploying $fn..." -ForegroundColor Gray
-    supabase functions deploy $fn --no-verify-jwt
+    
+    # Most functions need --no-verify-jwt for public access
+    $noVerifyJwt = @("paynowWebhook", "health", "sendOTP", "verifyOTP", "resendOTP")
+    
+    if ($noVerifyJwt -contains $fn) {
+        supabase functions deploy $fn --no-verify-jwt
+    } else {
+        supabase functions deploy $fn
+    }
+    
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ Failed to deploy $fn" -ForegroundColor Red
-        exit 1
+        Write-Host "⚠️  Warning: Failed to deploy $fn (continuing...)" -ForegroundColor Yellow
+        # Don't exit, continue with other functions
     }
 }
 

@@ -39,3 +39,5 @@ export const useRideStore = create<RideStore>((set) => ({
   clearRide: () => set({ ride: null }),
 }));
 
+
+

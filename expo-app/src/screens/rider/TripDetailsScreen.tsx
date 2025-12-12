@@ -1,5 +1,5 @@
 // Trip Details Screen - Rider views trip details and books a seat
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,18 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, MapType } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import { COLORS } from '../../theme';
-import { Screen } from '../../types';
+import { Screen, Location } from '../../types';
 import { Button } from '../../components';
 import { useTripStore, useWalletStore, useAuthStore } from '../../stores';
 import { bookSeat } from '../../api/trips';
 import { CONFIG } from '../../config';
 import { useMapContext, MapStyle } from '../../context/MapContext';
+import { getCurrentLocation } from '../../utils/location';
 
 const MAP_STYLES: { key: MapStyle; label: string; icon: string }[] = [
   { key: 'standard', label: 'Map', icon: '🗺️' },
@@ -41,7 +43,7 @@ interface Props {
 export function TripDetailsScreen({ onNavigate }: Props) {
   const { user } = useAuthStore();
   const { wallet } = useWalletStore();
-  const { selectedTrip, setActiveBooking } = useTripStore();
+  const { selectedTrip, setActiveBooking, searchOrigin } = useTripStore();
   const { style: mapStyle, setStyle: setMapStyle } = useMapContext();
   const [seatsToBook, setSeatsToBook] = useState(1);
   const [isBooking, setIsBooking] = useState(false);
@@ -51,7 +53,28 @@ export function TripDetailsScreen({ onNavigate }: Props) {
     origin: { latitude: number; longitude: number } | null;
     destination: { latitude: number; longitude: number } | null;
   }>({ origin: null, destination: null });
+  const [riderLocation, setRiderLocation] = useState<Location | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
   const mapRef = useRef<MapView>(null);
+
+  // Get rider's current location for pickup
+  useEffect(() => {
+    async function fetchRiderLocation() {
+      // Use searchOrigin if already captured, otherwise get fresh location
+      if (searchOrigin) {
+        setRiderLocation(searchOrigin);
+        return;
+      }
+      
+      setIsGettingLocation(true);
+      const result = await getCurrentLocation();
+      if (result.success && result.location) {
+        setRiderLocation(result.location);
+      }
+      setIsGettingLocation(false);
+    }
+    fetchRiderLocation();
+  }, [searchOrigin]);
 
   // Fetch trip coordinates on mount
   React.useEffect(() => {
@@ -115,13 +138,16 @@ export function TripDetailsScreen({ onNavigate }: Props) {
       return;
     }
 
+    if (!selectedTrip) return;
+    
     setIsBooking(true);
     try {
       const result = await bookSeat({
         tripId: selectedTrip.trip_id || selectedTrip.id,
         seats: seatsToBook,
-        pickupType: 'at_origin',
+        pickupType: riderLocation ? 'custom_pickup' : 'at_origin',
         dropoffType: 'at_destination',
+        riderCurrentLocation: riderLocation || undefined,
       });
 
       if (result.success && result.booking) {
@@ -222,8 +248,21 @@ export function TripDetailsScreen({ onNavigate }: Props) {
                     ))}
                   </View>
                 )}
-                {/* Origin Marker */}
-                <Marker coordinate={tripCoords.origin} title="Pickup">
+                {/* Rider's pickup location */}
+                {riderLocation && (
+                  <Marker 
+                    coordinate={riderLocation} 
+                    title="Your Pickup Location"
+                    description={riderLocation.address}
+                  >
+                    <View style={styles.riderMarker}>
+                      <Text style={styles.markerIcon}>📍</Text>
+                    </View>
+                  </Marker>
+                )}
+
+                {/* Trip Origin Marker */}
+                <Marker coordinate={tripCoords.origin} title="Trip Start">
                   <View style={styles.originMarker}>
                     <Text style={styles.markerIcon}>🟢</Text>
                   </View>
@@ -261,10 +300,38 @@ export function TripDetailsScreen({ onNavigate }: Props) {
           </View>
         </View>
 
+        {/* Your Pickup Location */}
+        <View style={styles.pickupCard}>
+          <View style={styles.pickupHeader}>
+            <Text style={styles.sectionTitle}>Your Pickup Location</Text>
+            {isGettingLocation && (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            )}
+          </View>
+          {riderLocation ? (
+            <View style={styles.pickupLocation}>
+              <Text style={styles.pickupIcon}>📍</Text>
+              <View style={styles.pickupInfo}>
+                <Text style={styles.pickupAddress}>{riderLocation.address}</Text>
+                {riderLocation.name && riderLocation.name !== riderLocation.address && (
+                  <Text style={styles.pickupName}>{riderLocation.name}</Text>
+                )}
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.pickupPlaceholder}>
+              Using trip origin as pickup point
+            </Text>
+          )}
+          <Text style={styles.pickupNote}>
+            📞 Driver will contact you for pickup coordination
+          </Text>
+        </View>
+
         {/* Route Details */}
         <View style={styles.routeCard}>
           <View style={styles.routeHeader}>
-            <Text style={styles.sectionTitle}>Route Details</Text>
+            <Text style={styles.sectionTitle}>Trip Route</Text>
             {routeInfo && (
               <View style={styles.routeStats}>
                 <Text style={styles.routeStat}>{routeInfo.distance.toFixed(1)} km</Text>
@@ -276,7 +343,7 @@ export function TripDetailsScreen({ onNavigate }: Props) {
           <View style={styles.routePoint}>
             <Text style={styles.routeIcon}>🟢</Text>
             <View>
-              <Text style={styles.routeLabel}>Pickup</Text>
+              <Text style={styles.routeLabel}>Trip Start</Text>
               <Text style={styles.routeAddress}>{selectedTrip.origin_address}</Text>
             </View>
           </View>
@@ -498,6 +565,13 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+  riderMarker: {
+    backgroundColor: '#DBEAFE',
+    padding: 8,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+  },
   originMarker: {
     backgroundColor: '#D1FAE5',
     padding: 6,
@@ -510,6 +584,54 @@ const styles = StyleSheet.create({
   },
   markerIcon: {
     fontSize: 14,
+  },
+  pickupCard: {
+    backgroundColor: '#DBEAFE',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  pickupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  pickupLocation: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  pickupIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  pickupInfo: {
+    flex: 1,
+  },
+  pickupAddress: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  pickupName: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  pickupPlaceholder: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+  },
+  pickupNote: {
+    fontSize: 12,
+    color: '#1D4ED8',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#93C5FD',
   },
   mapLoading: {
     flex: 1,

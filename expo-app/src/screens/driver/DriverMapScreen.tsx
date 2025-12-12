@@ -9,7 +9,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, MapType } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, MapType, Polyline } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
 import * as Location from 'expo-location';
 import { COLORS } from '../../theme';
@@ -19,6 +19,7 @@ import { supabase } from '../../api/supabase';
 import { CONFIG } from '../../config';
 import { getDriverActiveTrip } from '../../api/trips';
 import { useMapContext, MapStyle } from '../../context/MapContext';
+import { optimizePickupRoute, PickupPoint, getOptimizedDirections } from '../../utils/location';
 
 const MAP_STYLES: { key: MapStyle; label: string; icon: string }[] = [
   { key: 'standard', label: 'Map', icon: '🗺️' },
@@ -66,6 +67,13 @@ interface TripData {
   bookings: Booking[];
 }
 
+interface OptimizedRouteInfo {
+  orderedPickups: PickupPoint[];
+  totalDistance: number;
+  estimatedTime: number;
+  waypointOrder?: number[];
+}
+
 export function DriverMapScreen({ onNavigate }: Props) {
   const { style: mapStyle, setStyle: setMapStyle } = useMapContext();
   const mapRef = useRef<MapView>(null);
@@ -76,6 +84,8 @@ export function DriverMapScreen({ onNavigate }: Props) {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number } | null>(null);
+  const [optimizedRoute, setOptimizedRoute] = useState<OptimizedRouteInfo | null>(null);
+  const [showOptimizedRoute, setShowOptimizedRoute] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -97,6 +107,74 @@ export function DriverMapScreen({ onNavigate }: Props) {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Calculate optimized route when trip or driver location changes
+  useEffect(() => {
+    if (trip && driverLocation) {
+      calculateOptimizedRoute();
+    }
+  }, [trip?.bookings?.length, driverLocation?.latitude]);
+
+  async function calculateOptimizedRoute() {
+    if (!trip || !driverLocation) return;
+
+    const confirmedBookings = trip.bookings.filter(b => b.status === 'confirmed');
+    
+    if (confirmedBookings.length === 0) {
+      setOptimizedRoute(null);
+      return;
+    }
+
+    // Create pickup points from confirmed bookings
+    const pickupPoints: PickupPoint[] = confirmedBookings
+      .filter(b => b.pickup_latitude && b.pickup_longitude)
+      .map(b => ({
+        id: b.id,
+        latitude: b.pickup_latitude!,
+        longitude: b.pickup_longitude!,
+        riderName: b.rider?.first_name || 'Rider',
+        seats: b.seats,
+      }));
+
+    if (pickupPoints.length === 0) {
+      // Use trip origin for all pickups
+      setOptimizedRoute({
+        orderedPickups: [],
+        totalDistance: 0,
+        estimatedTime: 0,
+      });
+      return;
+    }
+
+    // Calculate optimized route locally first
+    const localOptimized = optimizePickupRoute(
+      driverLocation,
+      pickupPoints,
+      trip.destination
+    );
+
+    setOptimizedRoute(localOptimized);
+
+    // Try to get Google-optimized route for more accuracy
+    if (CONFIG.GOOGLE_MAPS_API_KEY && pickupPoints.length > 0) {
+      const googleRoute = await getOptimizedDirections(
+        driverLocation,
+        trip.destination,
+        pickupPoints.map(p => ({ latitude: p.latitude, longitude: p.longitude }))
+      );
+
+      if (googleRoute.success && googleRoute.waypointOrder) {
+        // Reorder pickup points based on Google's optimization
+        const reorderedPickups = googleRoute.waypointOrder.map(i => pickupPoints[i]);
+        setOptimizedRoute({
+          orderedPickups: reorderedPickups,
+          totalDistance: googleRoute.distance || localOptimized.totalDistance,
+          estimatedTime: googleRoute.duration || localOptimized.estimatedTime,
+          waypointOrder: googleRoute.waypointOrder,
+        });
+      }
+    }
+  }
 
   async function loadData() {
     try {
@@ -194,7 +272,10 @@ export function DriverMapScreen({ onNavigate }: Props) {
   function fitMapToRoute() {
     if (!mapRef.current || !trip) return;
     
-    const coords = [trip.origin, trip.destination];
+    const coords: { latitude: number; longitude: number }[] = [
+      { latitude: trip.origin.latitude, longitude: trip.origin.longitude },
+      { latitude: trip.destination.latitude, longitude: trip.destination.longitude }
+    ];
     if (driverLocation) coords.push(driverLocation);
     
     // Add rider pickup locations
@@ -327,43 +408,89 @@ export function DriverMapScreen({ onNavigate }: Props) {
           </View>
         </Marker>
 
-        {/* Rider Pickup Markers */}
-        {confirmedRiders.map((booking, index) => (
-          booking.pickup_latitude && booking.pickup_longitude && (
-            <Marker
-              key={booking.id}
-              coordinate={{
-                latitude: booking.pickup_latitude,
-                longitude: booking.pickup_longitude,
-              }}
-              title={`${booking.rider?.first_name || 'Rider'} ${booking.rider?.last_name || ''}`}
-              description={`${booking.seats} seat(s) • $${(booking.fare || 0).toFixed(2)}`}
-              onPress={() => setSelectedBooking(booking)}
-            >
-              <View style={[styles.riderMarker, { backgroundColor: getMarkerColor(index) }]}>
-                <Text style={styles.riderMarkerText}>{booking.seats}</Text>
-              </View>
-            </Marker>
-          )
-        ))}
+        {/* Rider Pickup Markers - Numbered for optimized route */}
+        {showOptimizedRoute && optimizedRoute && optimizedRoute.orderedPickups.length > 0 ? (
+          // Show numbered markers in optimized order
+          optimizedRoute.orderedPickups.map((pickup, index) => {
+            const booking = confirmedRiders.find(b => b.id === pickup.id);
+            return (
+              <Marker
+                key={pickup.id}
+                coordinate={{
+                  latitude: pickup.latitude,
+                  longitude: pickup.longitude,
+                }}
+                title={`Stop ${index + 1}: ${pickup.riderName}`}
+                description={`${pickup.seats} seat(s)`}
+                onPress={() => booking && setSelectedBooking(booking)}
+              >
+                <View style={[styles.numberedMarker, { backgroundColor: getMarkerColor(index) }]}>
+                  <Text style={styles.numberedMarkerText}>{index + 1}</Text>
+                </View>
+              </Marker>
+            );
+          })
+        ) : (
+          // Show regular markers without optimization
+          confirmedRiders.map((booking, index) => (
+            booking.pickup_latitude && booking.pickup_longitude && (
+              <Marker
+                key={booking.id}
+                coordinate={{
+                  latitude: booking.pickup_latitude,
+                  longitude: booking.pickup_longitude,
+                }}
+                title={`${booking.rider?.first_name || 'Rider'} ${booking.rider?.last_name || ''}`}
+                description={`${booking.seats} seat(s) • $${(booking.fare || 0).toFixed(2)}`}
+                onPress={() => setSelectedBooking(booking)}
+              >
+                <View style={[styles.riderMarker, { backgroundColor: getMarkerColor(index) }]}>
+                  <Text style={styles.riderMarkerText}>{booking.seats}</Text>
+                </View>
+              </Marker>
+            )
+          ))
+        )}
 
-        {/* Route from origin to destination */}
-        {CONFIG.GOOGLE_MAPS_API_KEY && (
+        {/* Optimized pickup route with waypoints */}
+        {showOptimizedRoute && driverLocation && CONFIG.GOOGLE_MAPS_API_KEY && 
+         optimizedRoute && optimizedRoute.orderedPickups.length > 0 ? (
           <MapViewDirections
-            origin={trip.origin}
+            origin={driverLocation}
             destination={trip.destination}
+            waypoints={optimizedRoute.orderedPickups.map(p => ({
+              latitude: p.latitude,
+              longitude: p.longitude,
+            }))}
             apikey={CONFIG.GOOGLE_MAPS_API_KEY}
-            strokeWidth={4}
-            strokeColor={COLORS.primary}
+            strokeWidth={5}
+            strokeColor="#10B981"
             mode="DRIVING"
+            optimizeWaypoints={true}
             onReady={(result) => {
               setRouteInfo({ distance: result.distance, duration: result.duration });
             }}
           />
+        ) : (
+          /* Regular route from origin to destination */
+          CONFIG.GOOGLE_MAPS_API_KEY && (
+            <MapViewDirections
+              origin={trip.origin}
+              destination={trip.destination}
+              apikey={CONFIG.GOOGLE_MAPS_API_KEY}
+              strokeWidth={4}
+              strokeColor={COLORS.primary}
+              mode="DRIVING"
+              onReady={(result) => {
+                setRouteInfo({ distance: result.distance, duration: result.duration });
+              }}
+            />
+          )
         )}
 
-        {/* Routes to each rider's pickup (if different from origin) */}
-        {driverLocation && CONFIG.GOOGLE_MAPS_API_KEY && confirmedRiders.map((booking, index) => (
+        {/* Individual routes to pickups (when not showing optimized route) */}
+        {!showOptimizedRoute && driverLocation && CONFIG.GOOGLE_MAPS_API_KEY && 
+         confirmedRiders.map((booking, index) => (
           booking.pickup_latitude && 
           booking.pickup_longitude && 
           (booking.pickup_latitude !== trip.origin.latitude || 
@@ -399,7 +526,9 @@ export function DriverMapScreen({ onNavigate }: Props) {
         <View style={styles.statDivider} />
         <View style={styles.stat}>
           <Text style={styles.statValue}>
-            {routeInfo ? `${routeInfo.distance.toFixed(1)}` : '--'}
+            {optimizedRoute?.totalDistance 
+              ? `${optimizedRoute.totalDistance.toFixed(1)}` 
+              : routeInfo ? `${routeInfo.distance.toFixed(1)}` : '--'}
           </Text>
           <Text style={styles.statLabel}>km</Text>
         </View>
@@ -410,6 +539,29 @@ export function DriverMapScreen({ onNavigate }: Props) {
         </View>
       </View>
 
+      {/* Optimized Route Toggle & Info */}
+      {confirmedRiders.length > 0 && optimizedRoute && optimizedRoute.orderedPickups.length > 0 && (
+        <TouchableOpacity 
+          style={styles.routeToggle}
+          onPress={() => setShowOptimizedRoute(!showOptimizedRoute)}
+        >
+          <View style={styles.routeToggleContent}>
+            <Text style={styles.routeToggleIcon}>{showOptimizedRoute ? '🛣️' : '📍'}</Text>
+            <View style={styles.routeToggleInfo}>
+              <Text style={styles.routeToggleTitle}>
+                {showOptimizedRoute ? 'Optimized Pickup Route' : 'Show Optimized Route'}
+              </Text>
+              <Text style={styles.routeToggleSubtitle}>
+                {optimizedRoute.orderedPickups.length} pickups • ~{Math.round(optimizedRoute.estimatedTime)} min
+              </Text>
+            </View>
+          </View>
+          <View style={[styles.routeToggleSwitch, showOptimizedRoute && styles.routeToggleSwitchActive]}>
+            <Text style={styles.routeToggleSwitchText}>{showOptimizedRoute ? 'ON' : 'OFF'}</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Riders List */}
       <View style={styles.ridersPanel}>
         <Text style={styles.panelTitle}>
@@ -418,13 +570,21 @@ export function DriverMapScreen({ onNavigate }: Props) {
         
         {confirmedRiders.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ridersList}>
-            {confirmedRiders.map((booking, index) => (
+            {/* Show riders in optimized order if available */}
+            {(showOptimizedRoute && optimizedRoute && optimizedRoute.orderedPickups.length > 0
+              ? optimizedRoute.orderedPickups.map((pickup, orderIndex) => {
+                  const booking = confirmedRiders.find(b => b.id === pickup.id);
+                  if (!booking) return null;
+                  return { booking, orderIndex };
+                }).filter(Boolean) as { booking: Booking; orderIndex: number }[]
+              : confirmedRiders.map((booking, index) => ({ booking, orderIndex: index }))
+            ).map(({ booking, orderIndex }) => (
               <TouchableOpacity
                 key={booking.id}
                 style={[
                   styles.riderCard,
                   selectedBooking?.id === booking.id && styles.riderCardSelected,
-                  { borderLeftColor: getMarkerColor(index) }
+                  { borderLeftColor: getMarkerColor(orderIndex) }
                 ]}
                 onPress={() => {
                   setSelectedBooking(booking);
@@ -438,7 +598,12 @@ export function DriverMapScreen({ onNavigate }: Props) {
                   }
                 }}
               >
-                <View style={[styles.riderAvatar, { backgroundColor: getMarkerColor(index) }]}>
+                {showOptimizedRoute && optimizedRoute && optimizedRoute.orderedPickups.length > 0 && (
+                  <View style={[styles.pickupOrderBadge, { backgroundColor: getMarkerColor(orderIndex) }]}>
+                    <Text style={styles.pickupOrderText}>{orderIndex + 1}</Text>
+                  </View>
+                )}
+                <View style={[styles.riderAvatar, { backgroundColor: getMarkerColor(orderIndex) }]}>
                   <Text style={styles.riderAvatarText}>
                     {(booking.rider?.first_name?.[0] || 'R').toUpperCase()}
                   </Text>
@@ -450,6 +615,11 @@ export function DriverMapScreen({ onNavigate }: Props) {
                   <Text style={styles.riderDetails}>
                     {booking.seats} seat(s) • ${(booking.fare || 0).toFixed(2)}
                   </Text>
+                  {booking.pickup_address && (
+                    <Text style={styles.riderPickupAddress} numberOfLines={1}>
+                      📍 {booking.pickup_address}
+                    </Text>
+                  )}
                 </View>
               </TouchableOpacity>
             ))}
@@ -670,6 +840,78 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  numberedMarker: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  numberedMarkerText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  routeToggle: {
+    position: 'absolute',
+    top: 200,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  routeToggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  routeToggleIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  routeToggleInfo: {
+    flex: 1,
+  },
+  routeToggleTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  routeToggleSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  routeToggleSwitch: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  routeToggleSwitchActive: {
+    backgroundColor: '#10B981',
+  },
+  routeToggleSwitchText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
   statsBar: {
     position: 'absolute',
     top: 110,
@@ -769,6 +1011,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  riderPickupAddress: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 4,
+  },
+  pickupOrderBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    zIndex: 1,
+  },
+  pickupOrderText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
   },
   noRidersContainer: {
     padding: 20,

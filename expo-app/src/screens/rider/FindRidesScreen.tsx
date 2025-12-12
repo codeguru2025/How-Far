@@ -16,6 +16,7 @@ import { Button } from '../../components';
 import { CONFIG } from '../../config';
 import { useTripStore } from '../../stores';
 import { findTrips } from '../../api/trips';
+import { getCurrentLocation } from '../../utils/location';
 
 interface Props {
   onNavigate: (screen: Screen) => void;
@@ -34,6 +35,33 @@ export function FindRidesScreen({ onNavigate }: Props) {
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingTrips, setIsLoadingTrips] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Auto-capture rider's location on mount
+  useEffect(() => {
+    captureCurrentLocation();
+  }, []);
+
+  async function captureCurrentLocation() {
+    setIsGettingLocation(true);
+    setLocationError(null);
+    try {
+      const result = await getCurrentLocation();
+      if (result.success && result.location) {
+        setSearchLocations(result.location, searchDestination);
+        // Auto-advance to destination step
+        setStep('destination');
+      } else {
+        setLocationError(result.error || 'Could not get location');
+      }
+    } catch (error) {
+      console.error('Location capture error:', error);
+      setLocationError('Failed to get current location');
+    } finally {
+      setIsGettingLocation(false);
+    }
+  }
 
   async function searchPlaces(query: string) {
     if (query.length < 3) {
@@ -117,17 +145,46 @@ export function FindRidesScreen({ onNavigate }: Props) {
       <Text style={styles.stepTitle}>
         {step === 'origin' ? '📍 Where are you now?' : '🎯 Where are you going?'}
       </Text>
+
+      {/* Auto-location loading state */}
+      {isGettingLocation && step === 'origin' && (
+        <View style={styles.autoLocationContainer}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.autoLocationText}>Getting your current location...</Text>
+        </View>
+      )}
+
+      {/* Location error with retry */}
+      {locationError && step === 'origin' && !isGettingLocation && (
+        <View style={styles.locationErrorContainer}>
+          <Text style={styles.locationErrorText}>⚠️ {locationError}</Text>
+          <TouchableOpacity onPress={captureCurrentLocation} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Use current location button */}
+      {step === 'origin' && !isGettingLocation && !searchOrigin && (
+        <TouchableOpacity 
+          style={styles.useCurrentLocationButton}
+          onPress={captureCurrentLocation}
+        >
+          <Text style={styles.useCurrentLocationIcon}>📍</Text>
+          <Text style={styles.useCurrentLocationText}>Use my current location</Text>
+        </TouchableOpacity>
+      )}
       
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder={step === 'origin' ? 'Enter your location...' : 'Enter destination...'}
+          placeholder={step === 'origin' ? 'Or search for a location...' : 'Enter destination...'}
           value={searchQuery}
           onChangeText={(text) => {
             setSearchQuery(text);
             searchPlaces(text);
           }}
-          autoFocus
+          autoFocus={step === 'destination'}
         />
         {isSearching && <ActivityIndicator style={styles.searchSpinner} />}
       </View>
@@ -138,14 +195,19 @@ export function FindRidesScreen({ onNavigate }: Props) {
           style={styles.selectedLocation}
           onPress={() => setStep('origin')}
         >
-          <Text style={styles.selectedLabel}>From:</Text>
+          <View style={styles.selectedLocationHeader}>
+            <Text style={styles.selectedLabel}>From:</Text>
+            <Text style={styles.changeText}>Change</Text>
+          </View>
           <Text style={styles.selectedAddress}>{searchOrigin.address}</Text>
-          <Text style={styles.changeText}>Tap to change</Text>
+          {searchOrigin.name && searchOrigin.name !== searchOrigin.address && (
+            <Text style={styles.selectedName}>{searchOrigin.name}</Text>
+          )}
         </TouchableOpacity>
       )}
 
       {/* Search Results */}
-      <ScrollView style={styles.searchResultsList}>
+      <ScrollView style={styles.searchResultsList} keyboardShouldPersistTaps="handled">
         {searchResults.map((result) => (
           <TouchableOpacity
             key={result.place_id}
@@ -376,11 +438,70 @@ const styles = StyleSheet.create({
   searchSpinner: {
     marginRight: 16,
   },
+  autoLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  autoLocationText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  locationErrorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  locationErrorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    marginBottom: 8,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  useCurrentLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 10,
+  },
+  useCurrentLocationIcon: {
+    fontSize: 20,
+  },
+  useCurrentLocationText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   selectedLocation: {
     backgroundColor: COLORS.primary + '15',
     borderRadius: 10,
     padding: 14,
     marginBottom: 20,
+  },
+  selectedLocationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   selectedLabel: {
     fontSize: 12,
@@ -392,10 +513,15 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginTop: 4,
   },
+  selectedName: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
   changeText: {
     fontSize: 12,
     color: COLORS.primary,
-    marginTop: 6,
+    fontWeight: '500',
   },
   searchResultsList: {
     flex: 1,
@@ -624,4 +750,5 @@ const styles = StyleSheet.create({
     height: 40,
   },
 });
+
 

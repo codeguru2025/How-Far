@@ -61,16 +61,17 @@ export function ProfileScreen({ onNavigate }: Props) {
       </View>
 
       <View style={styles.menuSection}>
-        <MenuItem icon="👤" label="Edit Profile" onPress={() => {}} />
-        <MenuItem icon="🔔" label="Notifications" onPress={() => {}} />
-        <MenuItem icon="🛡️" label="Safety & Guardians" onPress={() => {}} />
-        <MenuItem icon="💳" label="Payment Methods" onPress={() => {}} />
+        <MenuItem icon="👤" label="Edit Profile" onPress={() => onNavigate('edit-profile')} />
+        <MenuItem icon="🔔" label="Notifications" onPress={() => onNavigate('notifications')} />
+        <MenuItem icon="🛡️" label="Safety & Guardians" onPress={() => onNavigate('safety')} />
+        <MenuItem icon="💳" label="Payment Methods" onPress={() => onNavigate('payment-methods')} />
         <MenuItem 
           icon="🚗" 
           label={isDriver ? 'Switch to Passenger' : 'Become a Driver'} 
           onPress={toggleDriverMode} 
         />
-        <MenuItem icon="❓" label="Help & Support" onPress={() => {}} />
+        <MenuItem icon="❓" label="Help & Support" onPress={() => onNavigate('help')} />
+        <MenuItem icon="🌍" label="Language & Voice" onPress={() => onNavigate('language-settings')} />
       </View>
 
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>

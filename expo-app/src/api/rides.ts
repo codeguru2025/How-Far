@@ -3,22 +3,7 @@
 import { supabase } from './supabase';
 import { Location, Driver, RideStatus, VehicleType } from '../types';
 import { CONFIG } from '../config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const AUTH_KEY = 'ndeip_user_session';
-
-// Helper to get current user from storage
-async function getCurrentUser() {
-  try {
-    const data = await AsyncStorage.getItem(AUTH_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+import { getCurrentUser } from '../utils/auth';
 
 export interface RideRequest {
   pickup: Location;
@@ -300,7 +285,7 @@ export function subscribeToRide(
         filter: `id=eq.${rideId}`,
       },
       async (payload) => {
-        console.log('Ride update:', payload);
+        if (__DEV__) console.log('Ride update:', payload);
         const ride = await getActiveRide();
         if (ride) {
           onUpdate(ride);
@@ -330,7 +315,7 @@ export function subscribeToDriverLocation(
         filter: `ride_id=eq.${rideId}`,
       },
       (payload) => {
-        console.log('Driver location update:', payload);
+        if (__DEV__) console.log('Driver location update:', payload);
         const { latitude, longitude } = payload.new as any;
         onLocationUpdate({ latitude, longitude });
       }
@@ -463,7 +448,7 @@ export async function completeRide(
       .from('rides')
       .update({
         status: 'completed',
-        payment_status: 'completed',
+        payment_status: 'paid',
         final_price: finalPrice,
         tip_amount: tipAmount,
         completed_at: new Date().toISOString(),

@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import MapViewDirections from 'react-native-maps-directions';
@@ -20,6 +21,7 @@ import { CONFIG } from '../../config';
 import { useTripStore, useAuthStore } from '../../stores';
 import { createTrip, startTrip } from '../../api/trips';
 import { supabase } from '../../api/supabase';
+import { getCurrentLocation } from '../../utils/location';
 
 interface Props {
   onNavigate: (screen: Screen) => void;
@@ -30,7 +32,7 @@ export function CreateTripScreen({ onNavigate }: Props) {
   const { user } = useAuthStore();
   const { tripDraft, setTripDraft, resetTripDraft } = useTripStore();
   
-  const [step, setStep] = useState<'origin' | 'destination' | 'details'>('origin');
+  const [step, setStep] = useState<'origin' | 'destination' | 'waypoints' | 'details'>('origin');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -38,11 +40,37 @@ export function CreateTripScreen({ onNavigate }: Props) {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number } | null>(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [waypoints, setWaypoints] = useState<Location[]>([]);
+  const [isAddingWaypoint, setIsAddingWaypoint] = useState(false);
 
   useEffect(() => {
     loadVehicles();
     resetTripDraft();
+    // Auto-capture driver's current location as origin
+    captureCurrentLocation();
   }, []);
+
+  async function captureCurrentLocation() {
+    setIsGettingLocation(true);
+    setLocationError(null);
+    try {
+      const result = await getCurrentLocation();
+      if (result.success && result.location) {
+        setTripDraft({ origin: result.location });
+        // Auto-advance to destination step since origin is set
+        setStep('destination');
+      } else {
+        setLocationError(result.error || 'Could not get location');
+      }
+    } catch (error) {
+      console.error('Location capture error:', error);
+      setLocationError('Failed to get current location');
+    } finally {
+      setIsGettingLocation(false);
+    }
+  }
 
   async function loadVehicles() {
     try {
@@ -109,7 +137,13 @@ export function CreateTripScreen({ onNavigate }: Props) {
           setStep('destination');
         } else if (step === 'destination') {
           setTripDraft({ destination: location });
-          setStep('details');
+          setStep('waypoints');
+        } else if (step === 'waypoints' && isAddingWaypoint) {
+          // Add to waypoints
+          const newWaypoints = [...waypoints, location];
+          setWaypoints(newWaypoints);
+          setTripDraft({ waypoints: newWaypoints.map(w => ({ location: w })) });
+          setIsAddingWaypoint(false);
         }
         
         setSearchQuery('');
@@ -118,6 +152,22 @@ export function CreateTripScreen({ onNavigate }: Props) {
     } catch (error) {
       console.error('Place details error:', error);
     }
+  }
+
+  function removeWaypoint(index: number) {
+    const newWaypoints = waypoints.filter((_, i) => i !== index);
+    setWaypoints(newWaypoints);
+    setTripDraft({ waypoints: newWaypoints.map(w => ({ location: w })) });
+  }
+
+  function moveWaypoint(index: number, direction: 'up' | 'down') {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= waypoints.length) return;
+    
+    const newWaypoints = [...waypoints];
+    [newWaypoints[index], newWaypoints[newIndex]] = [newWaypoints[newIndex], newWaypoints[index]];
+    setWaypoints(newWaypoints);
+    setTripDraft({ waypoints: newWaypoints.map(w => ({ location: w })) });
   }
 
   async function handleCreateTrip() {
@@ -185,22 +235,51 @@ export function CreateTripScreen({ onNavigate }: Props) {
       <Text style={styles.stepTitle}>
         {step === 'origin' ? '📍 Where are you starting from?' : '🎯 Where are you going?'}
       </Text>
+
+      {/* Auto-location loading state */}
+      {isGettingLocation && step === 'origin' && (
+        <View style={styles.autoLocationContainer}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={styles.autoLocationText}>Getting your current location...</Text>
+        </View>
+      )}
+
+      {/* Location error with retry */}
+      {locationError && step === 'origin' && !isGettingLocation && (
+        <View style={styles.locationErrorContainer}>
+          <Text style={styles.locationErrorText}>⚠️ {locationError}</Text>
+          <TouchableOpacity onPress={captureCurrentLocation} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Use current location button */}
+      {step === 'origin' && !isGettingLocation && !tripDraft.origin && (
+        <TouchableOpacity 
+          style={styles.useCurrentLocationButton}
+          onPress={captureCurrentLocation}
+        >
+          <Text style={styles.useCurrentLocationIcon}>📍</Text>
+          <Text style={styles.useCurrentLocationText}>Use my current location</Text>
+        </TouchableOpacity>
+      )}
       
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder={step === 'origin' ? 'Enter pickup location...' : 'Enter destination...'}
+          placeholder={step === 'origin' ? 'Or search for a location...' : 'Enter destination...'}
           value={searchQuery}
           onChangeText={(text) => {
             setSearchQuery(text);
             searchPlaces(text);
           }}
-          autoFocus
+          autoFocus={step === 'destination'}
         />
       </View>
 
       {searchResults.length > 0 && (
-        <ScrollView style={styles.searchResults}>
+        <ScrollView style={styles.searchResults} keyboardShouldPersistTaps="handled">
           {searchResults.map((result) => (
             <TouchableOpacity
               key={result.place_id}
@@ -221,13 +300,176 @@ export function CreateTripScreen({ onNavigate }: Props) {
         </ScrollView>
       )}
 
-      {/* Show selected locations */}
+      {/* Show selected origin when on destination step */}
       {tripDraft.origin && step === 'destination' && (
-        <View style={styles.selectedLocation}>
-          <Text style={styles.selectedLabel}>From:</Text>
+        <TouchableOpacity 
+          style={styles.selectedLocation}
+          onPress={() => setStep('origin')}
+        >
+          <View style={styles.selectedLocationHeader}>
+            <Text style={styles.selectedLabel}>From:</Text>
+            <Text style={styles.changeLocationText}>Change</Text>
+          </View>
           <Text style={styles.selectedAddress}>{tripDraft.origin.address}</Text>
-        </View>
+          {tripDraft.origin.name && tripDraft.origin.name !== tripDraft.origin.address && (
+            <Text style={styles.selectedName}>{tripDraft.origin.name}</Text>
+          )}
+        </TouchableOpacity>
       )}
+    </View>
+  );
+
+  const renderWaypointsStep = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>🛑 Add Stops (Optional)</Text>
+      <Text style={styles.stepSubtitle}>
+        Add pickup/dropoff points along your route where passengers can join or leave
+      </Text>
+
+      {/* Route Overview */}
+      <View style={styles.routeOverview}>
+        <View style={styles.routeStopItem}>
+          <View style={[styles.routeStopDot, styles.routeStopStart]} />
+          <Text style={styles.routeStopText} numberOfLines={1}>
+            {tripDraft.origin?.address?.split(',')[0]}
+          </Text>
+        </View>
+        
+        {waypoints.map((wp, index) => (
+          <View key={index}>
+            <View style={styles.routeStopLine} />
+            <View style={styles.waypointItem}>
+              <View style={[styles.routeStopDot, styles.routeStopWaypoint]} />
+              <Text style={styles.routeStopText} numberOfLines={1}>
+                {wp.address?.split(',')[0] || `Stop ${index + 1}`}
+              </Text>
+              <View style={styles.waypointActions}>
+                {index > 0 && (
+                  <TouchableOpacity 
+                    style={styles.waypointActionBtn}
+                    onPress={() => moveWaypoint(index, 'up')}
+                  >
+                    <Text style={styles.waypointActionText}>↑</Text>
+                  </TouchableOpacity>
+                )}
+                {index < waypoints.length - 1 && (
+                  <TouchableOpacity 
+                    style={styles.waypointActionBtn}
+                    onPress={() => moveWaypoint(index, 'down')}
+                  >
+                    <Text style={styles.waypointActionText}>↓</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity 
+                  style={[styles.waypointActionBtn, styles.waypointRemoveBtn]}
+                  onPress={() => removeWaypoint(index)}
+                >
+                  <Text style={styles.waypointRemoveText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        ))}
+        
+        <View style={styles.routeStopLine} />
+        <View style={styles.routeStopItem}>
+          <View style={[styles.routeStopDot, styles.routeStopEnd]} />
+          <Text style={styles.routeStopText} numberOfLines={1}>
+            {tripDraft.destination?.address?.split(',')[0]}
+          </Text>
+        </View>
+      </View>
+
+      {/* Add Waypoint */}
+      {isAddingWaypoint ? (
+        <View style={styles.addWaypointSearch}>
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for a stop location..."
+              value={searchQuery}
+              onChangeText={(text) => {
+                setSearchQuery(text);
+                searchPlaces(text);
+              }}
+              autoFocus
+            />
+          </View>
+          
+          {searchResults.length > 0 && (
+            <ScrollView style={styles.searchResults} keyboardShouldPersistTaps="handled">
+              {searchResults.map((result) => (
+                <TouchableOpacity
+                  key={result.place_id}
+                  style={styles.searchResultItem}
+                  onPress={() => selectPlace(result.place_id, result.description)}
+                >
+                  <Text style={styles.searchResultIcon}>📍</Text>
+                  <View style={styles.searchResultText}>
+                    <Text style={styles.searchResultMain} numberOfLines={1}>
+                      {result.structured_formatting?.main_text || result.description}
+                    </Text>
+                    <Text style={styles.searchResultSecondary} numberOfLines={1}>
+                      {result.structured_formatting?.secondary_text || ''}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+          
+          <TouchableOpacity 
+            style={styles.cancelAddWaypoint}
+            onPress={() => {
+              setIsAddingWaypoint(false);
+              setSearchQuery('');
+              setSearchResults([]);
+            }}
+          >
+            <Text style={styles.cancelAddWaypointText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity 
+          style={styles.addWaypointButton}
+          onPress={() => setIsAddingWaypoint(true)}
+        >
+          <Text style={styles.addWaypointIcon}>➕</Text>
+          <Text style={styles.addWaypointText}>Add a Stop</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Popular Stops Suggestions */}
+      <View style={styles.suggestionsSection}>
+        <Text style={styles.suggestionsTitle}>Popular Stops</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {['Rank', 'Shopping Mall', 'Hospital', 'Market', 'Bus Station'].map((place) => (
+            <TouchableOpacity
+              key={place}
+              style={styles.suggestionChip}
+              onPress={() => {
+                setIsAddingWaypoint(true);
+                setSearchQuery(place + ' Bulawayo');
+                searchPlaces(place + ' Bulawayo');
+              }}
+            >
+              <Text style={styles.suggestionText}>{place}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Continue Button */}
+      <View style={styles.waypointFooter}>
+        <Button
+          title={waypoints.length > 0 ? `Continue with ${waypoints.length} stop(s)` : 'Skip - No Stops'}
+          onPress={() => setStep('details')}
+          size="large"
+        />
+        <Text style={styles.waypointHint}>
+          You can always add or edit stops later
+        </Text>
+      </View>
     </View>
   );
 
@@ -254,6 +496,18 @@ export function CreateTripScreen({ onNavigate }: Props) {
                 <Text>🟢</Text>
               </View>
             </Marker>
+            {/* Waypoint Markers */}
+            {waypoints.map((wp, index) => (
+              <Marker 
+                key={`waypoint-${index}`} 
+                coordinate={wp} 
+                title={`Stop ${index + 1}`}
+              >
+                <View style={styles.waypointMarker}>
+                  <Text style={styles.waypointMarkerText}>{index + 1}</Text>
+                </View>
+              </Marker>
+            ))}
             <Marker coordinate={tripDraft.destination} title="End">
               <View style={styles.destMarker}>
                 <Text>🔴</Text>
@@ -263,13 +517,15 @@ export function CreateTripScreen({ onNavigate }: Props) {
               <MapViewDirections
                 origin={tripDraft.origin}
                 destination={tripDraft.destination}
+                waypoints={waypoints.length > 0 ? waypoints : undefined}
                 apikey={CONFIG.GOOGLE_MAPS_API_KEY}
                 strokeWidth={4}
                 strokeColor={COLORS.primary}
                 onReady={(result) => {
                   setRouteInfo({ distance: result.distance, duration: result.duration });
+                  const allCoords = [tripDraft.origin!, ...waypoints, tripDraft.destination!];
                   mapRef.current?.fitToCoordinates(
-                    [tripDraft.origin!, tripDraft.destination!],
+                    allCoords,
                     { edgePadding: { top: 50, right: 50, bottom: 50, left: 50 } }
                   );
                 }}
@@ -280,6 +536,7 @@ export function CreateTripScreen({ onNavigate }: Props) {
             <View style={styles.routeInfoBadge}>
               <Text style={styles.routeInfoText}>
                 {routeInfo.distance.toFixed(1)} km • {Math.round(routeInfo.duration)} min
+                {waypoints.length > 0 && ` • ${waypoints.length} stop(s)`}
               </Text>
             </View>
           )}
@@ -292,11 +549,29 @@ export function CreateTripScreen({ onNavigate }: Props) {
           <Text style={styles.routeIcon}>🟢</Text>
           <Text style={styles.routeAddress} numberOfLines={1}>{tripDraft.origin?.address}</Text>
         </View>
+        {waypoints.map((wp, index) => (
+          <React.Fragment key={`summary-wp-${index}`}>
+            <View style={styles.routeLine} />
+            <View style={styles.routePoint}>
+              <View style={styles.waypointNumberBadge}>
+                <Text style={styles.waypointNumberText}>{index + 1}</Text>
+              </View>
+              <Text style={styles.routeAddress} numberOfLines={1}>{wp.address}</Text>
+            </View>
+          </React.Fragment>
+        ))}
         <View style={styles.routeLine} />
         <View style={styles.routePoint}>
           <Text style={styles.routeIcon}>🔴</Text>
           <Text style={styles.routeAddress} numberOfLines={1}>{tripDraft.destination?.address}</Text>
         </View>
+        {/* Edit Stops Button */}
+        <TouchableOpacity 
+          style={styles.editStopsButton}
+          onPress={() => setStep('waypoints')}
+        >
+          <Text style={styles.editStopsText}>✏️ Edit Stops</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Vehicle Selection */}
@@ -424,21 +699,27 @@ export function CreateTripScreen({ onNavigate }: Props) {
 
       {/* Progress Steps */}
       <View style={styles.progressContainer}>
-        <View style={[styles.progressStep, step !== 'origin' && styles.progressStepComplete]}>
+        <View style={[styles.progressStep, (step !== 'origin') && styles.progressStepComplete]}>
           <Text style={styles.progressStepText}>1</Text>
         </View>
-        <View style={[styles.progressLine, step !== 'origin' && styles.progressLineComplete]} />
-        <View style={[styles.progressStep, step === 'details' && styles.progressStepComplete]}>
+        <View style={[styles.progressLine, (step !== 'origin') && styles.progressLineComplete]} />
+        <View style={[styles.progressStep, (step === 'waypoints' || step === 'details') && styles.progressStepComplete]}>
           <Text style={styles.progressStepText}>2</Text>
+        </View>
+        <View style={[styles.progressLine, (step === 'waypoints' || step === 'details') && styles.progressLineComplete]} />
+        <View style={[styles.progressStep, step === 'details' && styles.progressStepComplete, step === 'waypoints' && styles.progressStepActive]}>
+          <Text style={styles.progressStepText}>3</Text>
         </View>
         <View style={[styles.progressLine, step === 'details' && styles.progressLineComplete]} />
         <View style={[styles.progressStep, step === 'details' && styles.progressStepActive]}>
-          <Text style={styles.progressStepText}>3</Text>
+          <Text style={styles.progressStepText}>4</Text>
         </View>
       </View>
 
       {/* Content */}
-      {step === 'details' ? renderDetailsStep() : renderLocationStep()}
+      {step === 'details' && renderDetailsStep()}
+      {step === 'waypoints' && renderWaypointsStep()}
+      {(step === 'origin' || step === 'destination') && renderLocationStep()}
     </KeyboardAvoidingView>
   );
 }
@@ -559,21 +840,90 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
   },
+  autoLocationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '10',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  autoLocationText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  locationErrorContainer: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  locationErrorText: {
+    fontSize: 14,
+    color: '#DC2626',
+    marginBottom: 8,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  useCurrentLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 10,
+  },
+  useCurrentLocationIcon: {
+    fontSize: 20,
+  },
+  useCurrentLocationText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
   selectedLocation: {
     backgroundColor: COLORS.primary + '15',
     borderRadius: 10,
     padding: 14,
     marginTop: 20,
   },
+  selectedLocationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   selectedLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.primary,
   },
+  changeLocationText: {
+    fontSize: 12,
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
   selectedAddress: {
     fontSize: 15,
     color: COLORS.text,
     marginTop: 4,
+  },
+  selectedName: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   mapPreview: {
     height: 180,
@@ -796,6 +1146,181 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  // Waypoints styles
+  stepSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  routeOverview: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  routeStopItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  routeStopDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    marginRight: 14,
+  },
+  routeStopStart: {
+    backgroundColor: '#10B981',
+  },
+  routeStopEnd: {
+    backgroundColor: '#EF4444',
+  },
+  routeStopWaypoint: {
+    backgroundColor: COLORS.primary,
+  },
+  routeStopText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  routeStopLine: {
+    width: 2,
+    height: 24,
+    backgroundColor: COLORS.border,
+    marginLeft: 6,
+    marginVertical: 4,
+  },
+  waypointItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  waypointActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  waypointActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  waypointActionText: {
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  waypointRemoveBtn: {
+    backgroundColor: '#FEE2E2',
+  },
+  waypointRemoveText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '600',
+  },
+  addWaypointSearch: {
+    marginBottom: 20,
+  },
+  addWaypointButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    gap: 10,
+  },
+  addWaypointIcon: {
+    fontSize: 18,
+  },
+  addWaypointText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  cancelAddWaypoint: {
+    alignItems: 'center',
+    padding: 12,
+  },
+  cancelAddWaypointText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  suggestionsSection: {
+    marginBottom: 24,
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+  suggestionChip: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  suggestionText: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '500',
+  },
+  waypointFooter: {
+    marginTop: 'auto',
+    paddingTop: 20,
+  },
+  waypointHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: 12,
+  },
+  waypointMarker: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  waypointMarkerText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  waypointNumberBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  waypointNumberText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  editStopsButton: {
+    alignSelf: 'flex-end',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  editStopsText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '500',
   },
 });
 

@@ -1,4 +1,6 @@
 // ============ TYPES ============
+// Main type definitions for the app
+// Type guards are in ./guards.ts
 
 export type Screen = 
   // Auth & Main
@@ -6,9 +8,13 @@ export type Screen =
   // Old ride flow (keeping for compatibility)
   | 'driver' | 'search' | 'confirm-ride' | 'tracking'
   // Shared Rides - Driver
-  | 'driver-home' | 'create-trip' | 'set-route' | 'set-fares' | 'trip-dashboard' | 'scan-qr' | 'add-vehicle' | 'register-driver' | 'driver-map'
+  | 'driver-home' | 'create-trip' | 'set-route' | 'set-fares' | 'trip-dashboard' | 'scan-qr' | 'add-vehicle' | 'register-driver' | 'driver-map' | 'trip-active' | 'withdraw'
   // Shared Rides - Rider
-  | 'commuter-home' | 'find-rides' | 'trip-details' | 'book-seat' | 'booking-active' | 'show-qr' | 'rider-map';
+  | 'commuter-home' | 'find-rides' | 'trip-details' | 'book-seat' | 'booking-active' | 'show-qr' | 'rider-map'
+  // Settings & Profile
+  | 'settings' | 'language-settings' | 'edit-profile' | 'notifications' | 'safety' | 'payment-methods' | 'help'
+  // Chat
+  | 'chat' | 'conversations';
 export type UserRole = 'passenger' | 'driver';
 export type PaymentMethod = 'ecocash' | 'onemoney' | 'innbucks' | 'bank';
 export type TransactionStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
@@ -119,7 +125,7 @@ export interface Ride {
 
 // ============ SHARED RIDES TYPES ============
 
-export type TripStatus = 'draft' | 'scheduled' | 'active' | 'in_progress' | 'completed' | 'cancelled';
+export type TripStatus = 'draft' | 'scheduled' | 'pending' | 'active' | 'in_progress' | 'completed' | 'cancelled';
 export type TripType = 'local' | 'kombi' | 'long_distance' | 'private';
 export type BookingStatus = 'pending' | 'confirmed' | 'picked_up' | 'completed' | 'cancelled' | 'no_show';
 export type PickupType = 'at_origin' | 'custom_pickup';
@@ -130,10 +136,13 @@ export interface Trip {
   id: string;
   driver_id: string;
   vehicle_id: string;
+  owner_id?: string;
   
   // Route
   origin: Location;
   destination: Location;
+  origin_address?: string;
+  destination_address?: string;
   route_polyline?: string;
   waypoints?: TripWaypoint[];
   
@@ -141,6 +150,8 @@ export interface Trip {
   trip_type: TripType;
   total_seats: number;
   available_seats: number;
+  seats_available?: number; // DB column name alias
+  seats_total?: number; // DB column name alias
   
   // Pricing
   base_fare: number;
@@ -155,10 +166,23 @@ export interface Trip {
   
   // Driver info (joined)
   driver?: Driver;
+  driver_name?: string;
+  driver_rating?: number;
   vehicle?: Vehicle;
+  vehicle_info?: {
+    make?: string;
+    model?: string;
+    color?: string;
+    registration_number?: string;
+  };
   
   // Bookings
   bookings?: Booking[];
+  
+  // Computed fields (from API joins)
+  trip_id?: string; // Used in search results
+  totalEarnings?: number;
+  totalSeatsBooked?: number;
   
   created_at: string;
 }

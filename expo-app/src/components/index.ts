@@ -5,5 +5,6 @@ export { Card } from './Card';
 export { BottomNav } from './BottomNav';
 export { UniversalMap } from './UniversalMap';
 export type { UniversalMapRef } from './UniversalMap';
+export { MapboxMapView } from './MapboxView';
 export { ErrorBoundary, ScreenErrorBoundary } from './ErrorBoundary';
 

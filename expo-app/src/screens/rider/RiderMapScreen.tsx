@@ -16,13 +16,13 @@ import * as Location from 'expo-location';
 import { COLORS } from '../../theme';
 import { Screen } from '../../types';
 import { Button } from '../../components';
-import { useTripStore } from '../../stores';
+import { useTripStore, useAuthStore } from '../../stores';
 import { supabase } from '../../api/supabase';
 import { CONFIG } from '../../config';
 import { useMapContext, MapStyle } from '../../context/MapContext';
 
 interface Props {
-  onNavigate: (screen: Screen) => void;
+  onNavigate: (screen: Screen, params?: any) => void;
 }
 
 interface DriverLocation {
@@ -48,7 +48,8 @@ function getMapType(style: MapStyle): MapType {
 }
 
 export function RiderMapScreen({ onNavigate }: Props) {
-  const { activeBooking } = useTripStore();
+  const { activeBooking, selectedTrip } = useTripStore();
+  const { user } = useAuthStore();
   const { style: mapStyle, setStyle: setMapStyle } = useMapContext();
   const mapRef = useRef<MapView>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -183,9 +184,54 @@ export function RiderMapScreen({ onNavigate }: Props) {
     if (url) Linking.openURL(url);
   }
 
-  function callDriver() {
-    // TODO: Get driver phone from booking
-    Alert.alert('Call Driver', 'This feature will be available soon.');
+  async function messageDriver() {
+    if (!activeBooking || !user) {
+      Alert.alert('Error', 'Cannot open chat');
+      return;
+    }
+
+    try {
+      const { getOrCreateConversation } = await import('../../api/messaging');
+      let driverId = selectedTrip?.owner_id || selectedTrip?.driver_id;
+      
+      // Fetch driver ID from trip if not available
+      if (!driverId && activeBooking.trip_id) {
+        const { supabase } = await import('../../api/supabase');
+        const { data: trip } = await supabase
+          .from('trips')
+          .select('owner_id')
+          .eq('id', activeBooking.trip_id)
+          .single();
+        driverId = trip?.owner_id;
+      }
+
+      if (!driverId) {
+        Alert.alert('Error', 'Driver info not found');
+        return;
+      }
+
+      const { conversation, error } = await getOrCreateConversation(
+        activeBooking.id,
+        activeBooking.trip_id,
+        driverId,
+        user.id
+      );
+
+      if (error || !conversation) {
+        console.error('Chat error:', error);
+        Alert.alert('Error', error || 'Could not open chat');
+        return;
+      }
+
+      onNavigate('chat', {
+        conversationId: conversation.id,
+        otherUserName: 'Driver',
+        isDriver: false,
+      });
+    } catch (error: any) {
+      console.error('Message driver error:', error);
+      Alert.alert('Error', error?.message || 'Failed to open chat');
+    }
   }
 
   if (isLoading) {
@@ -390,9 +436,9 @@ export function RiderMapScreen({ onNavigate }: Props) {
             <Text style={styles.actionIcon}>🗺️</Text>
             <Text style={styles.actionText}>Navigate</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={callDriver}>
-            <Text style={styles.actionIcon}>📞</Text>
-            <Text style={styles.actionText}>Call</Text>
+          <TouchableOpacity style={styles.actionButton} onPress={messageDriver}>
+            <Text style={styles.actionIcon}>💬</Text>
+            <Text style={styles.actionText}>Message</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={() => onNavigate('show-qr')}>
             <Text style={styles.actionIcon}>📱</Text>

@@ -1,55 +1,114 @@
 {
   "expo": {
-    "name": "Ndeip-Zthin",
-    "slug": "ndeip-zthin",
+    "name": "How Far",
+    "slug": "how-far",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/splash-icon.png",
       "backgroundColor": "#E85A24",
       "resizeMode": "contain"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ndeip.zthin",
+      "bundleIdentifier": "com.howfar.app",
+      "buildNumber": "1",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["innbucks", "schinn.wbpycode"],
-        "NSLocationWhenInUseUsageDescription": "This app needs your location to show nearby places and calculate ride routes.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to track rides in progress."
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "innbucks",
+          "schinn.wbpycode"
+        ],
+        "NSLocationWhenInUseUsageDescription": "How Far needs your location to show nearby rides and calculate routes to your destination.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "How Far uses your location to track rides in progress and provide accurate arrival times.",
+        "NSCameraUsageDescription": "How Far needs camera access to scan QR codes for secure payments between riders and drivers.",
+        "NSPhotoLibraryUsageDescription": "How Far may need access to your photos to upload profile pictures.",
+        "NSMicrophoneUsageDescription": "How Far may need microphone access for voice features."
       },
       "config": {
-        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY"
-      }
+        "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
+      },
+      "associatedDomains": [
+        "applinks:howfar.app"
+      ]
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#E85A24"
       },
-      "package": "com.ndeip.zthin",
+      "package": "com.howfar.app",
+      "versionCode": 1,
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "VIBRATE"
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+          "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
         }
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "howfar.app",
+              "pathPrefix": "/ride"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
     },
     "plugins": [
       "expo-secure-store",
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Ndeip-Zthin to use your location for ride tracking."
+          "locationAlwaysAndWhenInUsePermission": "Allow How Far to use your location for real-time ride tracking and navigation."
         }
-      ]
-    ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow How Far to use your camera to scan QR codes for secure payments."
+        }
+      ],
+      "@rnmapbox/maps"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "00b90bb5-eadd-443f-8c0d-3c93a41b2222"
+      }
+    },
+    "updates": {
+      "enabled": true,
+      "fallbackToCacheTimeout": 30000,
+      "url": "https://u.expo.dev/00b90bb5-eadd-443f-8c0d-3c93a41b2222"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "owner": "gustozw"
   }
 }

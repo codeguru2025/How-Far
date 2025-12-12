@@ -1,5 +1,5 @@
 # ============================================
-# Ndeip-Zthin .gitignore
+# How Far .gitignore
 # ============================================
 
 # Dependencies
@@ -35,6 +35,9 @@ expo-app/.env
 google-services.json
 GoogleService-Info.plist
 service-account.json
+google-service-account.json
+*-service-account.json
+expo-app/google-service-account.json
 
 # IDE
 .idea/
