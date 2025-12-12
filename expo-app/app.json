@@ -81,6 +81,15 @@
       "bundler": "metro"
     },
     "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1",
+            "enableBitcode": false
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-location",
