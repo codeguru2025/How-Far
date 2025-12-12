@@ -128,7 +128,7 @@ export function HistoryScreen({ onNavigate }: Props) {
         <Text style={styles.emptyIcon}>🚗</Text>
         <Text style={styles.emptyTitle}>No rides yet</Text>
         <Text style={styles.emptySubtitle}>Your ride history will appear here</Text>
-        <TouchableOpacity style={styles.bookRideBtn} onPress={() => onNavigate('search')}>
+        <TouchableOpacity style={styles.bookRideBtn} onPress={() => onNavigate('find-rides')}>
           <Text style={styles.bookRideBtnText}>Book a Ride</Text>
         </TouchableOpacity>
       </View>

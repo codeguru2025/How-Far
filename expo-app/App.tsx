@@ -135,6 +135,7 @@ export default function App() {
             {currentScreen === 'home' && <CommuterHomeScreen onNavigate={navigate} />}
             {currentScreen === 'commuter-home' && <CommuterHomeScreen onNavigate={navigate} />}
             {currentScreen === 'find-rides' && <FindRidesScreen onNavigate={navigate} />}
+            {currentScreen === 'search' && <FindRidesScreen onNavigate={navigate} />}
             {currentScreen === 'trip-details' && <TripDetailsScreen onNavigate={navigate} />}
             {currentScreen === 'show-qr' && <ShowQRScreen onNavigate={navigate} />}
             {currentScreen === 'booking-active' && <ShowQRScreen onNavigate={navigate} />}

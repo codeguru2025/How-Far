@@ -71,6 +71,8 @@ export async function createTrip(params: CreateTripParams): Promise<{ success: b
         seats_total: params.totalSeats,
         seats_available: params.totalSeats,
         base_fare: params.baseFare,
+        pickup_fee: params.pickupFee || 0,
+        dropoff_fee: params.dropoffFee || 0,
         departure_time: params.departureTime || new Date().toISOString(),
         status: 'pending',
       })
@@ -252,11 +254,11 @@ export async function getDriverActiveTrip(forceRefresh: boolean = false): Promis
       // Fetch commuter names for each booking
       if (bookings && bookings.length > 0) {
         const enrichedBookings = await Promise.all(bookings.map(async (booking) => {
-          if (booking.commuter_id) {
+          if (booking.rider_id) {
             const { data: commuter } = await supabase
               .from('users')
               .select('first_name, last_name, phone_number')
-              .eq('id', booking.commuter_id)
+              .eq('id', booking.rider_id)
               .single();
             return { ...booking, rider: commuter };
           }
@@ -271,8 +273,8 @@ export async function getDriverActiveTrip(forceRefresh: boolean = false): Promis
       const confirmedBookings = data.bookings.filter((b: any) => 
         b.status === 'confirmed' || b.payment_status === 'paid'
       );
-      data.totalEarnings = confirmedBookings.reduce((sum: number, b: any) => sum + (b.fare || 0), 0);
-      data.totalSeatsBooked = confirmedBookings.reduce((sum: number, b: any) => sum + (b.seats || 0), 0);
+      data.totalEarnings = confirmedBookings.reduce((sum: number, b: any) => sum + (b.total_amount || b.base_amount || b.fare || 0), 0);
+      data.totalSeatsBooked = confirmedBookings.reduce((sum: number, b: any) => sum + (b.seats_booked || b.seats || 0), 0);
     }
 
     if (error || !data) {
@@ -406,11 +408,21 @@ export async function bookSeat(params: BookSeatParams): Promise<{ success: boole
     const baseFare = trip.base_fare || 0;
     const seatsToBook = params.seats || 1;
     const baseAmount = baseFare * seatsToBook;
-    const pickupFee = params.pickupType === 'custom_pickup' ? 1 : 0; // $1 extra for custom pickup
-    const dropoffFee = params.dropoffType === 'custom_dropoff' ? 1 : 0; // $1 extra for custom dropoff
+    // Use driver's set pickup/dropoff fees from the trip
+    const pickupFee = params.pickupType === 'custom_pickup' ? (trip.pickup_fee || 0) : 0;
+    const dropoffFee = params.dropoffType === 'custom_dropoff' ? (trip.dropoff_fee || 0) : 0;
     const totalAmount = baseAmount + pickupFee + dropoffFee;
     
-    if (__DEV__) console.log('bookSeat - pricing:', { baseFare, seatsToBook, baseAmount, totalAmount });
+    if (__DEV__) console.log('bookSeat - pricing:', { 
+      baseFare, 
+      seatsToBook, 
+      baseAmount, 
+      pickupFee,
+      dropoffFee,
+      totalAmount,
+      pickupType: params.pickupType,
+      dropoffType: params.dropoffType 
+    });
 
     // Check rider's wallet balance (need total + 2.5% fee)
     const { data: wallet } = await supabase
@@ -435,9 +447,12 @@ export async function bookSeat(params: BookSeatParams): Promise<{ success: boole
     // Create booking (matching actual table columns)
     const bookingData: any = {
       trip_id: params.tripId,
-      commuter_id: user.id,
-      seats: seatsToBook,
-      fare: totalAmount > 0 ? totalAmount : baseFare, // Ensure fare is never null/0
+      rider_id: user.id,
+      seats_booked: seatsToBook,
+      base_amount: baseAmount, // Total base fare (baseFare * seats)
+      total_amount: totalAmount > 0 ? totalAmount : baseAmount, // base + fees
+      pickup_fee: pickupFee,
+      dropoff_fee: dropoffFee,
       status: 'pending',
       payment_status: 'pending',
     };
@@ -485,7 +500,7 @@ export async function getRiderBookings(status?: string[]): Promise<any[]> {
     let query = supabase
       .from('bookings')
       .select('*')
-      .eq('commuter_id', user.id)
+      .eq('rider_id', user.id)
       .order('created_at', { ascending: false });
 
     if (status && status.length > 0) {
@@ -511,7 +526,7 @@ export async function getRiderActiveBooking(): Promise<any | null> {
     const { data, error } = await supabase
       .from('bookings')
       .select('*')
-      .eq('commuter_id', user.id)
+      .eq('rider_id', user.id)
       .in('status', ['pending', 'confirmed'])
       .order('created_at', { ascending: false })
       .limit(1)
@@ -548,7 +563,7 @@ export async function confirmBooking(bookingId: string): Promise<boolean> {
     // Fetch booking with trip data
     const { data: booking, error: fetchError } = await supabase
       .from('bookings')
-      .select('id, seats, trip_id')
+      .select('id, seats_booked, trip_id')
       .eq('id', bookingId)
       .single();
 
@@ -634,7 +649,7 @@ export async function getBookingQRCode(bookingId: string): Promise<{ qrToken: st
     // Use correct column names from actual schema
     const { data, error } = await supabase
       .from('bookings')
-      .select('id, fare, seats, status, trip_id, commuter_id')
+      .select('id, total_amount, base_amount, seats_booked, status, trip_id, rider_id')
       .eq('id', bookingId)
       .single();
 
@@ -657,8 +672,8 @@ export async function getBookingQRCode(bookingId: string): Promise<{ qrToken: st
       qrToken: qrToken,
       bookingData: {
         id: data.id,
-        amount: data.fare,
-        seats: data.seats,
+        amount: data.total_amount || data.base_amount,
+        seats: data.seats_booked,
         status: data.status,
         trip: trip,
       },

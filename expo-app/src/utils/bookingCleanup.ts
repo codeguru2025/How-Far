@@ -16,7 +16,7 @@ export async function checkAndCleanStaleBookings(userId: string): Promise<Cleanu
     const { data: bookings, error: bookingsError } = await supabase
       .from('bookings')
       .select('id, trip_id, status, created_at')
-      .eq('commuter_id', userId)
+      .eq('rider_id', userId)
       .in('status', ['pending', 'confirmed']);
 
     if (bookingsError || !bookings || bookings.length === 0) {
@@ -84,7 +84,7 @@ export async function getActiveBookingWithValidation(userId: string): Promise<an
     const { data, error } = await supabase
       .from('bookings')
       .select('*')
-      .eq('commuter_id', userId)
+      .eq('rider_id', userId)
       .in('status', ['pending', 'confirmed'])
       .order('created_at', { ascending: false })
       .limit(1)

@@ -127,7 +127,7 @@ export function TripActiveScreen({ onNavigate }: Props) {
             seats: p.seats,
           })),
         hasStarted: tripStarted,
-        hasAnnouncedAllAboard: allPassengersOnboard && tripStarted,
+        hasAnnouncedAllAboard: false, // Don't pre-set, let announceAllAboard() handle it
       };
       initTrip(announcementInfo);
     }
@@ -163,8 +163,8 @@ export function TripActiveScreen({ onNavigate }: Props) {
         .map((b: any) => ({
           id: b.id,
           name: b.rider?.first_name || 'Passenger',
-          seats: b.seats || 1,
-          fare: b.fare || 0,
+          seats: b.seats_booked || b.seats || 1,
+          fare: b.total_amount || b.base_amount || b.fare || 0,
           pickupLatitude: b.pickup_latitude,
           pickupLongitude: b.pickup_longitude,
           pickupAddress: b.pickup_address,
@@ -234,6 +234,12 @@ export function TripActiveScreen({ onNavigate }: Props) {
     const allOnboard = updatedPassengers.every(p => p.status === 'onboard');
     if (allOnboard && !allPassengersOnboard) {
       setAllPassengersOnboard(true);
+      
+      // Auto-start trip and announce when all passengers are onboard
+      if (!tripStarted) {
+        setTripStarted(true);
+        announceAllAboard(updatedPassengers.length);
+      }
     }
   }
 

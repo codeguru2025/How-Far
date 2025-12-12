@@ -110,11 +110,36 @@ serve(async (req: Request) => {
     
     if (paynowStatus === "paid" || paynowStatus === "awaiting delivery" || paynowStatus === "delivered") {
       // PAYMENT SUCCESSFUL - Credit the wallet!
-      console.log("Payment successful! Crediting wallet...");
+      console.log("Payment successful! Attempting to credit wallet...");
 
       const numAmount = parseFloat(amount) || transaction.amount;
       
-      // Get current wallet balance
+      // ATOMIC: First, try to claim this transaction by marking it as completed
+      // This prevents race conditions with the reconciliation flow
+      const { data: claimedTxn, error: claimError } = await supabase
+        .from("transactions")
+        .update({
+          status: "completed",
+          external_reference: paynowreference,
+          metadata: {
+            ...transaction.metadata,
+            paynow_status: status,
+            completed_at: new Date().toISOString(),
+            credited_via: "paynow_webhook",
+          },
+        })
+        .eq("id", transaction.id)
+        .eq("status", "pending")  // Only update if still pending!
+        .select()
+        .single();
+
+      if (claimError || !claimedTxn) {
+        // Another process already claimed this transaction
+        console.log("Transaction already claimed by another process, skipping wallet credit");
+        return new Response("OK", { status: 200 });
+      }
+
+      // Now we have exclusive claim - safe to credit wallet
       const { data: wallet, error: walletFetchError } = await supabase
         .from("wallets")
         .select("id, balance")
@@ -123,6 +148,11 @@ serve(async (req: Request) => {
 
       if (walletFetchError || !wallet) {
         console.error("Wallet not found for user:", transaction.user_id, walletFetchError);
+        // Revert transaction status since we couldn't credit
+        await supabase
+          .from("transactions")
+          .update({ status: "pending" })
+          .eq("id", transaction.id);
         return new Response("Wallet not found", { status: 404 });
       }
 
@@ -141,24 +171,6 @@ serve(async (req: Request) => {
       if (walletError) {
         console.error("Failed to update wallet:", walletError);
         return new Response("Wallet update failed", { status: 500 });
-      }
-
-      // Update transaction status
-      const { error: txnUpdateError } = await supabase
-        .from("transactions")
-        .update({
-          status: "completed",
-          external_reference: paynowreference,
-          metadata: {
-            ...transaction.metadata,
-            paynow_status: status,
-            completed_at: new Date().toISOString(),
-          },
-        })
-        .eq("id", transaction.id);
-
-      if (txnUpdateError) {
-        console.error("Failed to update transaction:", txnUpdateError);
       }
 
       console.log(`✅ SUCCESS: Credited $${numAmount} to user ${transaction.user_id}. New balance: $${newBalance}`);

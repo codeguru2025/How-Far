@@ -8,7 +8,7 @@ import { CONFIG } from '../config';
  * Get the rider/commuter ID from a booking (handles both column names)
  */
 export function getRiderId(booking: Booking): string | undefined {
-  return booking.commuter_id || booking.rider_id;
+  return booking.rider_id || booking.commuter_id;
 }
 
 /**

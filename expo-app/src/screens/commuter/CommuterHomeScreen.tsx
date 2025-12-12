@@ -98,7 +98,7 @@ export function CommuterHomeScreen({ onNavigate }: Props) {
               {activeBooking.trip?.origin?.address} → {activeBooking.trip?.destination?.address}
             </Text>
             <Text style={styles.activeCardPrice}>
-              ${(activeBooking.fare || 0).toFixed(2)} • {activeBooking.seats || 1} seat(s)
+              ${(activeBooking.total_amount || activeBooking.base_amount || activeBooking.fare || 0).toFixed(2)} • {activeBooking.seats_booked || activeBooking.seats || 1} seat(s)
             </Text>
           </View>
 

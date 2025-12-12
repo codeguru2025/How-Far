@@ -28,7 +28,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
   async function handleMessageRider(booking: Booking) {
-    if (!trip || !user || !booking.commuter_id) {
+    if (!trip || !user || !booking.rider_id) {
       Alert.alert('Error', 'Cannot open chat');
       return;
     }
@@ -38,7 +38,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
         booking.id,
         trip.id,
         user.id,
-        booking.commuter_id
+        booking.rider_id
       );
 
       if (error || !conversation) {
@@ -101,7 +101,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
       // Get booking details first
       const { data: booking } = await supabase
         .from('bookings')
-        .select('seats, trip_id')
+        .select('seats_booked, trip_id')
         .eq('id', bookingId)
         .single();
 
@@ -125,7 +125,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
       const { error: tripError } = await supabase
         .from('trips')
         .update({ 
-          seats_available: (trip?.seats_available || 0) - (booking.seats || 1)
+          seats_available: (trip?.seats_available || 0) - (booking.seats_booked || booking.seats || 1)
         })
         .eq('id', booking.trip_id);
 
@@ -133,7 +133,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
         console.error('Error updating seats:', tripError);
       }
 
-      Alert.alert('Confirmed! ✅', `${booking.seats} seat(s) have been confirmed.`);
+      Alert.alert('Confirmed! ✅', `${booking.seats_booked || booking.seats || 1} seat(s) have been confirmed.`);
       loadTrip();
     } catch (error) {
       console.error('Confirm booking error:', error);
@@ -155,7 +155,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
               // Get booking to check if it was confirmed (seats were deducted)
               const { data: booking } = await supabase
                 .from('bookings')
-                .select('seats, trip_id, status')
+                .select('seats_booked, trip_id, status')
                 .eq('id', bookingId)
                 .single();
 
@@ -170,7 +170,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
                   await supabase
                     .from('trips')
                     .update({ 
-                      seats_available: (trip.seats_available || 0) + (booking.seats || 1)
+                      seats_available: (trip.seats_available || 0) + (booking.seats_booked || booking.seats || 1)
                     })
                     .eq('id', booking.trip_id);
                 }
@@ -323,7 +323,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
                     {booking.rider?.first_name || 'Rider'} {booking.rider?.last_name || ''}
                   </Text>
                   <Text style={styles.bookingDetails}>
-                    {booking.seats || 1} seat(s) • ${(booking.fare || 0).toFixed(2)}
+                    {booking.seats_booked || booking.seats || 1} seat(s) • ${(booking.total_amount || booking.base_amount || booking.fare || 0).toFixed(2)}
                   </Text>
                 </View>
                 <View style={styles.bookingActions}>
@@ -356,7 +356,7 @@ export function TripDashboardScreen({ onNavigate }: Props) {
                     {booking.rider?.first_name || 'Rider'} {booking.rider?.last_name || ''}
                   </Text>
                   <Text style={styles.bookingDetails}>
-                    {booking.seats || 1} seat(s) • ${(booking.fare || 0).toFixed(2)}
+                    {booking.seats_booked || booking.seats || 1} seat(s) • ${(booking.total_amount || booking.base_amount || booking.fare || 0).toFixed(2)}
                   </Text>
                   <Text style={styles.bookingStatus}>
                     {booking.status === 'picked_up' ? '🚗 Picked up' : '⏳ Waiting for pickup'}

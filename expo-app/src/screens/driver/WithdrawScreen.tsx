@@ -70,7 +70,8 @@ export function WithdrawScreen({ onNavigate }: Props) {
         const { data: completedBookings } = await supabase
           .from('bookings')
           .select(`
-            fare,
+            total_amount,
+            base_amount,
             payment_status,
             trips!inner(driver_id, status)
           `)
@@ -78,7 +79,7 @@ export function WithdrawScreen({ onNavigate }: Props) {
           .eq('payment_status', 'paid')
           .in('trips.status', ['completed', 'in_progress']);
 
-        const totalEarned = completedBookings?.reduce((sum, b) => sum + (b.fare || 0), 0) || 0;
+        const totalEarned = completedBookings?.reduce((sum, b) => sum + (b.total_amount || b.base_amount || 0), 0) || 0;
 
         // Get pending payouts
         const { data: pendingPayouts } = await supabase

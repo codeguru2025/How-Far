@@ -5,6 +5,8 @@ export { Card } from './Card';
 export { BottomNav } from './BottomNav';
 export { UniversalMap } from './UniversalMap';
 export type { UniversalMapRef } from './UniversalMap';
-export { MapboxMapView } from './MapboxView';
 export { ErrorBoundary, ScreenErrorBoundary } from './ErrorBoundary';
+
+// Note: MapboxMapView is NOT exported here to prevent eager loading in Expo Go
+// Import it directly when needed: import { MapboxMapView } from '../components/MapboxView';
 

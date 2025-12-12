@@ -43,9 +43,12 @@ interface Props {
 
 interface Booking {
   id: string;
-  commuter_id: string;
-  seats: number;
-  fare: number;
+  rider_id: string;
+  seats?: number;
+  seats_booked?: number;
+  fare?: number;
+  total_amount?: number;
+  base_amount?: number;
   status: string;
   pickup_latitude?: number;
   pickup_longitude?: number;
@@ -133,7 +136,7 @@ export function DriverMapScreen({ onNavigate }: Props) {
         latitude: b.pickup_latitude!,
         longitude: b.pickup_longitude!,
         riderName: b.rider?.first_name || 'Rider',
-        seats: b.seats,
+        seats: b.seats_booked || b.seats || 1,
       }));
 
     if (pickupPoints.length === 0) {
@@ -321,8 +324,8 @@ export function DriverMapScreen({ onNavigate }: Props) {
   }
 
   const confirmedRiders = trip.bookings.filter(b => b.status === 'confirmed');
-  const totalSeats = confirmedRiders.reduce((sum, b) => sum + (b.seats || 1), 0);
-  const totalFare = confirmedRiders.reduce((sum, b) => sum + (b.fare || 0), 0);
+  const totalSeats = confirmedRiders.reduce((sum, b) => sum + (b.seats_booked || b.seats || 1), 0);
+  const totalFare = confirmedRiders.reduce((sum, b) => sum + (b.total_amount || b.base_amount || b.fare || 0), 0);
 
   return (
     <View style={styles.container}>
@@ -441,11 +444,11 @@ export function DriverMapScreen({ onNavigate }: Props) {
                   longitude: booking.pickup_longitude,
                 }}
                 title={`${booking.rider?.first_name || 'Rider'} ${booking.rider?.last_name || ''}`}
-                description={`${booking.seats} seat(s) • $${(booking.fare || 0).toFixed(2)}`}
+                description={`${booking.seats_booked || booking.seats || 1} seat(s) • $${(booking.total_amount || booking.base_amount || booking.fare || 0).toFixed(2)}`}
                 onPress={() => setSelectedBooking(booking)}
               >
                 <View style={[styles.riderMarker, { backgroundColor: getMarkerColor(index) }]}>
-                  <Text style={styles.riderMarkerText}>{booking.seats}</Text>
+                  <Text style={styles.riderMarkerText}>{booking.seats_booked || booking.seats || 1}</Text>
                 </View>
               </Marker>
             )
@@ -613,7 +616,7 @@ export function DriverMapScreen({ onNavigate }: Props) {
                     {booking.rider?.first_name || 'Rider'} {booking.rider?.last_name?.[0] || ''}
                   </Text>
                   <Text style={styles.riderDetails}>
-                    {booking.seats} seat(s) • ${(booking.fare || 0).toFixed(2)}
+                    {booking.seats_booked || booking.seats || 1} seat(s) • ${(booking.total_amount || booking.base_amount || booking.fare || 0).toFixed(2)}
                   </Text>
                   {booking.pickup_address && (
                     <Text style={styles.riderPickupAddress} numberOfLines={1}>

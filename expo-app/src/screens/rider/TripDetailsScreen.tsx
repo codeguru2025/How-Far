@@ -55,6 +55,7 @@ export function TripDetailsScreen({ onNavigate }: Props) {
   }>({ origin: null, destination: null });
   const [riderLocation, setRiderLocation] = useState<Location | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [pickupType, setPickupType] = useState<'at_origin' | 'custom_pickup'>('at_origin');
   const mapRef = useRef<MapView>(null);
 
   // Get rider's current location for pickup
@@ -116,9 +117,12 @@ export function TripDetailsScreen({ onNavigate }: Props) {
   }
 
   const baseFare = selectedTrip.base_fare || 0;
+  const tripPickupFee = selectedTrip.pickup_fee || 0;
   const totalFare = baseFare * seatsToBook;
-  const serviceFee = totalFare * 0.025; // 2.5% rider fee
-  const grandTotal = totalFare + serviceFee;
+  const pickupFeeCharge = pickupType === 'custom_pickup' ? tripPickupFee : 0;
+  const subtotal = totalFare + pickupFeeCharge;
+  const serviceFee = subtotal * 0.025; // 2.5% rider fee
+  const grandTotal = subtotal + serviceFee;
 
   async function handleBookSeat() {
     if (!user?.id) {
@@ -145,8 +149,9 @@ export function TripDetailsScreen({ onNavigate }: Props) {
       const result = await bookSeat({
         tripId: selectedTrip.trip_id || selectedTrip.id,
         seats: seatsToBook,
-        pickupType: riderLocation ? 'custom_pickup' : 'at_origin',
+        pickupType: pickupType,
         dropoffType: 'at_destination',
+        pickupLocation: pickupType === 'custom_pickup' ? riderLocation || undefined : undefined,
         riderCurrentLocation: riderLocation || undefined,
       });
 
@@ -409,6 +414,42 @@ export function TripDetailsScreen({ onNavigate }: Props) {
           </View>
         </View>
 
+        {/* Pickup Option */}
+        <View style={styles.priceCard}>
+          <Text style={styles.sectionTitle}>Pickup Location</Text>
+          <View style={styles.pickupOptions}>
+            <TouchableOpacity
+              style={[styles.pickupOption, pickupType === 'at_origin' && styles.pickupOptionSelected]}
+              onPress={() => setPickupType('at_origin')}
+            >
+              <Text style={styles.pickupOptionIcon}>📍</Text>
+              <View style={styles.pickupOptionContent}>
+                <Text style={[styles.pickupOptionTitle, pickupType === 'at_origin' && styles.pickupOptionTitleSelected]}>
+                  Meet at Start
+                </Text>
+                <Text style={styles.pickupOptionDesc}>I'll go to the trip starting point</Text>
+              </View>
+              <Text style={styles.pickupOptionPrice}>Free</Text>
+            </TouchableOpacity>
+            
+            {tripPickupFee > 0 && (
+              <TouchableOpacity
+                style={[styles.pickupOption, pickupType === 'custom_pickup' && styles.pickupOptionSelected]}
+                onPress={() => setPickupType('custom_pickup')}
+              >
+                <Text style={styles.pickupOptionIcon}>🚗</Text>
+                <View style={styles.pickupOptionContent}>
+                  <Text style={[styles.pickupOptionTitle, pickupType === 'custom_pickup' && styles.pickupOptionTitleSelected]}>
+                    Pick Me Up
+                  </Text>
+                  <Text style={styles.pickupOptionDesc}>Driver comes to my location</Text>
+                </View>
+                <Text style={styles.pickupOptionPrice}>+${tripPickupFee.toFixed(2)}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         {/* Price Breakdown */}
         <View style={styles.priceCard}>
           <Text style={styles.sectionTitle}>Price Breakdown</Text>
@@ -416,6 +457,12 @@ export function TripDetailsScreen({ onNavigate }: Props) {
             <Text style={styles.priceLabel}>Fare ({seatsToBook} seat{seatsToBook > 1 ? 's' : ''} × ${baseFare.toFixed(2)})</Text>
             <Text style={styles.priceValue}>${totalFare.toFixed(2)}</Text>
           </View>
+          {pickupFeeCharge > 0 && (
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Pickup Fee</Text>
+              <Text style={styles.priceValue}>${pickupFeeCharge.toFixed(2)}</Text>
+            </View>
+          )}
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Service Fee (2.5%)</Text>
             <Text style={styles.priceValue}>${serviceFee.toFixed(2)}</Text>
@@ -819,6 +866,47 @@ const styles = StyleSheet.create({
   },
   seatButtonTextDisabled: {
     color: COLORS.textSecondary,
+  },
+  pickupOptions: {
+    gap: 10,
+  },
+  pickupOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  pickupOptionSelected: {
+    backgroundColor: COLORS.primary + '10',
+    borderColor: COLORS.primary,
+  },
+  pickupOptionIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  pickupOptionContent: {
+    flex: 1,
+  },
+  pickupOptionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 2,
+  },
+  pickupOptionTitleSelected: {
+    color: COLORS.primary,
+  },
+  pickupOptionDesc: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  pickupOptionPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.success,
   },
   priceCard: {
     backgroundColor: COLORS.surface,

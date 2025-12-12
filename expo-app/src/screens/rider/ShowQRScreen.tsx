@@ -95,7 +95,7 @@ export function ShowQRScreen({ onNavigate }: Props) {
         if (updatedBooking.payment_status === 'paid') {
           Alert.alert(
             'Payment Successful! 🎉',
-            `$${(updatedBooking.fare || 0).toFixed(2)} has been paid.\n\nEnjoy your ride!`,
+            `$${(updatedBooking.total_amount || updatedBooking.base_amount || updatedBooking.fare || 0).toFixed(2)} has been paid.\n\nEnjoy your ride!`,
             [{ text: 'OK', onPress: () => onNavigate('commuter-home') }]
           );
         }
@@ -170,8 +170,8 @@ export function ShowQRScreen({ onNavigate }: Props) {
               value={JSON.stringify({
                 token: qrData.qrToken,
                 bookingId: activeBooking?.id,
-                amount: activeBooking?.fare || 0,
-                seats: activeBooking?.seats || 1,
+                amount: activeBooking?.total_amount || activeBooking?.base_amount || activeBooking?.fare || 0,
+                seats: activeBooking?.seats_booked || activeBooking?.seats || 1,
               })}
               size={200}
               color={COLORS.text}
@@ -195,7 +195,7 @@ export function ShowQRScreen({ onNavigate }: Props) {
       <View style={styles.detailsContainer}>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Amount</Text>
-          <Text style={styles.detailValue}>${(activeBooking?.fare || 0).toFixed(2)}</Text>
+          <Text style={styles.detailValue}>${(activeBooking?.total_amount || activeBooking?.base_amount || activeBooking?.fare || 0).toFixed(2)}</Text>
         </View>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Seats</Text>
@@ -204,13 +204,13 @@ export function ShowQRScreen({ onNavigate }: Props) {
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Service Fee (2.5%)</Text>
           <Text style={styles.detailValue}>
-            ${((activeBooking?.fare || 0) * 0.025).toFixed(2)}
+            ${((activeBooking?.total_amount || activeBooking?.base_amount || activeBooking?.fare || 0) * 0.025).toFixed(2)}
           </Text>
         </View>
         <View style={[styles.detailRow, styles.totalRow]}>
           <Text style={styles.totalLabel}>Total to Pay</Text>
           <Text style={styles.totalValue}>
-            ${((activeBooking?.fare || 0) * 1.025).toFixed(2)}
+            ${((activeBooking?.total_amount || activeBooking?.base_amount || activeBooking?.fare || 0) * 1.025).toFixed(2)}
           </Text>
         </View>
       </View>

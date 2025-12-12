@@ -71,11 +71,11 @@ export function DriverHomeScreen({ onNavigate }: Props) {
           // Calculate actual earnings from paid bookings
           const { data: paidBookings } = await supabase
             .from('bookings')
-            .select('fare, status')
+            .select('total_amount, base_amount, status')
             .in('trip_id', tripIds)
             .eq('payment_status', 'paid');
           
-          totalEarned = paidBookings?.reduce((sum, b) => sum + (b.fare || 0), 0) || 0;
+          totalEarned = paidBookings?.reduce((sum, b) => sum + (b.total_amount || b.base_amount || 0), 0) || 0;
           
           // Get completed rides count
           const { data: completedBookings } = await supabase

@@ -1,12 +1,34 @@
 // Mapbox Map Component
-import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Mapbox, { Camera, MapView, PointAnnotation, MarkerView } from '@rnmapbox/maps';
+// NOTE: This component requires a development/production build - it won't work in Expo Go
+import React, { useRef } from 'react';
+import { StyleSheet, View, Text } from 'react-native';
 import { COLORS } from '../theme';
 
-// Initialize Mapbox with public token
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '';
-Mapbox.setAccessToken(MAPBOX_TOKEN);
+// Lazy load Mapbox to prevent crashes in Expo Go
+let Mapbox: any = null;
+let Camera: any = null;
+let MapView: any = null;
+let MarkerView: any = null;
+let isMapboxAvailable = false;
+
+try {
+  const mapboxModule = require('@rnmapbox/maps');
+  Mapbox = mapboxModule.default;
+  Camera = mapboxModule.Camera;
+  MapView = mapboxModule.MapView;
+  MarkerView = mapboxModule.MarkerView;
+  
+  // Initialize Mapbox with public token
+  const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN || '';
+  if (MAPBOX_TOKEN && Mapbox?.setAccessToken) {
+    Mapbox.setAccessToken(MAPBOX_TOKEN);
+    isMapboxAvailable = true;
+  }
+} catch (error) {
+  // Mapbox native code not available (Expo Go)
+  console.log('Mapbox native code not available - using fallback');
+  isMapboxAvailable = false;
+}
 
 interface Location {
   latitude: number;
@@ -37,7 +59,23 @@ export function MapboxMapView({
   style,
   zoomLevel = 12,
 }: MapboxViewProps) {
-  const cameraRef = useRef<Camera>(null);
+  const cameraRef = useRef<any>(null);
+
+  // Show fallback if Mapbox is not available (Expo Go)
+  if (!isMapboxAvailable || !MapView) {
+    return (
+      <View style={[styles.container, styles.fallback, style]}>
+        <Text style={styles.fallbackText}>📍</Text>
+        <Text style={styles.fallbackTitle}>Map Preview</Text>
+        <Text style={styles.fallbackSubtitle}>
+          Mapbox requires a development build
+        </Text>
+        <Text style={styles.fallbackHint}>
+          Use Google Maps or build with EAS
+        </Text>
+      </View>
+    );
+  }
 
   const handlePress = (event: any) => {
     if (onPress && event.geometry?.coordinates) {
@@ -66,7 +104,7 @@ export function MapboxMapView({
           animationDuration={1000}
         />
 
-        {showUserLocation && (
+        {showUserLocation && Mapbox?.UserLocation && (
           <Mapbox.UserLocation visible={true} />
         )}
 
@@ -112,6 +150,33 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#FFFFFF',
+  },
+  // Fallback styles for Expo Go
+  fallback: {
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  fallbackText: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  fallbackTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  fallbackSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  fallbackHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 8,
   },
 });
 

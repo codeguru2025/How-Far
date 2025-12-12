@@ -23,6 +23,9 @@ import { createTrip, startTrip } from '../../api/trips';
 import { supabase } from '../../api/supabase';
 import { getCurrentLocation } from '../../utils/location';
 
+// Track if user has manually set origin to prevent race condition with auto-location
+let userSetOriginManually = false;
+
 interface Props {
   onNavigate: (screen: Screen) => void;
 }
@@ -48,21 +51,42 @@ export function CreateTripScreen({ onNavigate }: Props) {
   useEffect(() => {
     loadVehicles();
     resetTripDraft();
+    // Reset the manual flag when screen mounts
+    userSetOriginManually = false;
     // Auto-capture driver's current location as origin
     captureCurrentLocation();
   }, []);
 
-  async function captureCurrentLocation() {
+  // Clear search results when step changes
+  useEffect(() => {
+    setSearchQuery('');
+    setSearchResults([]);
+  }, [step]);
+
+  async function captureCurrentLocation(isManualTrigger = false) {
     setIsGettingLocation(true);
     setLocationError(null);
     try {
       const result = await getCurrentLocation();
+      
+      // Only set origin if user hasn't manually selected one (unless this is a manual trigger)
+      if (userSetOriginManually && !isManualTrigger) {
+        console.log('User already set origin manually, ignoring auto-location');
+        setIsGettingLocation(false);
+        return;
+      }
+      
       if (result.success && result.location) {
+        // Mark as manually set if user triggered this
+        if (isManualTrigger) {
+          userSetOriginManually = true;
+        }
         setTripDraft({ origin: result.location });
         // Auto-advance to destination step since origin is set
         setStep('destination');
+        setLocationError(null);
       } else {
-        setLocationError(result.error || 'Could not get location');
+        setLocationError(result.error || 'Could not get location. Please search manually.');
       }
     } catch (error) {
       console.error('Location capture error:', error);
@@ -89,11 +113,28 @@ export function CreateTripScreen({ onNavigate }: Props) {
         
         setVehicles(data || []);
         if (data && data.length > 0) {
-          setSelectedVehicle(data[0].id);
+          const firstVehicle = data[0];
+          setSelectedVehicle(firstVehicle.id);
+          // Set initial seat count from vehicle's capacity
+          const seatCount = firstVehicle.seat_count || firstVehicle.passenger_capacity || 4;
+          setTripDraft({ totalSeats: seatCount });
         }
       }
     } catch (error) {
       console.error('Load vehicles error:', error);
+    }
+  }
+
+  // Update seat count when vehicle selection changes
+  function handleVehicleSelect(vehicleId: string) {
+    setSelectedVehicle(vehicleId);
+    const vehicle = vehicles.find(v => v.id === vehicleId);
+    if (vehicle) {
+      const maxSeats = vehicle.seat_count || vehicle.passenger_capacity || 4;
+      // If current selection exceeds new vehicle's capacity, adjust down
+      const newSeatCount = Math.min(tripDraft.totalSeats, maxSeats);
+      // Default to max if nothing selected
+      setTripDraft({ totalSeats: newSeatCount > 0 ? newSeatCount : maxSeats });
     }
   }
 
@@ -105,10 +146,17 @@ export function CreateTripScreen({ onNavigate }: Props) {
 
     setIsSearching(true);
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${CONFIG.GOOGLE_MAPS_API_KEY}&components=country:zw`
-      );
+      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${CONFIG.GOOGLE_MAPS_API_KEY}&components=country:zw`;
+      console.log('🔍 Searching for:', query);
+      
+      const response = await fetch(url);
       const data = await response.json();
+      
+      console.log('🔍 Results count:', data.predictions?.length || 0);
+      data.predictions?.forEach((p: any, i: number) => {
+        console.log(`  ${i}: ${p.description}`);
+      });
+      
       setSearchResults(data.predictions || []);
     } catch (error) {
       console.error('Search error:', error);
@@ -118,11 +166,16 @@ export function CreateTripScreen({ onNavigate }: Props) {
   }
 
   async function selectPlace(placeId: string, description: string) {
+    console.log('selectPlace called with:', { placeId, description, step });
+    
     try {
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,formatted_address&key=${CONFIG.GOOGLE_MAPS_API_KEY}`
-      );
+      const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,formatted_address&key=${CONFIG.GOOGLE_MAPS_API_KEY}`;
+      console.log('Fetching place details...');
+      
+      const response = await fetch(url);
       const data = await response.json();
+      
+      console.log('Place details response:', data.result?.formatted_address);
       
       if (data.result?.geometry?.location) {
         const location: Location = {
@@ -131,8 +184,16 @@ export function CreateTripScreen({ onNavigate }: Props) {
           address: data.result.formatted_address || description,
           name: description,
         };
+        
+        console.log('Setting location:', location.address, 'for step:', step);
+
+        // Clear search first to prevent re-triggering
+        setSearchQuery('');
+        setSearchResults([]);
 
         if (step === 'origin') {
+          // Mark that user manually set the origin (prevents auto-location overwrite)
+          userSetOriginManually = true;
           setTripDraft({ origin: location });
           setStep('destination');
         } else if (step === 'destination') {
@@ -145,9 +206,8 @@ export function CreateTripScreen({ onNavigate }: Props) {
           setTripDraft({ waypoints: newWaypoints.map(w => ({ location: w })) });
           setIsAddingWaypoint(false);
         }
-        
-        setSearchQuery('');
-        setSearchResults([]);
+      } else {
+        console.error('No geometry in place details:', data);
       }
     } catch (error) {
       console.error('Place details error:', error);
@@ -248,7 +308,7 @@ export function CreateTripScreen({ onNavigate }: Props) {
       {locationError && step === 'origin' && !isGettingLocation && (
         <View style={styles.locationErrorContainer}>
           <Text style={styles.locationErrorText}>⚠️ {locationError}</Text>
-          <TouchableOpacity onPress={captureCurrentLocation} style={styles.retryButton}>
+          <TouchableOpacity onPress={() => captureCurrentLocation(true)} style={styles.retryButton}>
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -258,7 +318,7 @@ export function CreateTripScreen({ onNavigate }: Props) {
       {step === 'origin' && !isGettingLocation && !tripDraft.origin && (
         <TouchableOpacity 
           style={styles.useCurrentLocationButton}
-          onPress={captureCurrentLocation}
+          onPress={() => captureCurrentLocation(true)}
         >
           <Text style={styles.useCurrentLocationIcon}>📍</Text>
           <Text style={styles.useCurrentLocationText}>Use my current location</Text>
@@ -280,23 +340,30 @@ export function CreateTripScreen({ onNavigate }: Props) {
 
       {searchResults.length > 0 && (
         <ScrollView style={styles.searchResults} keyboardShouldPersistTaps="handled">
-          {searchResults.map((result) => (
-            <TouchableOpacity
-              key={result.place_id}
-              style={styles.searchResultItem}
-              onPress={() => selectPlace(result.place_id, result.description)}
-            >
-              <Text style={styles.searchResultIcon}>📍</Text>
-              <View style={styles.searchResultText}>
-                <Text style={styles.searchResultMain} numberOfLines={1}>
-                  {result.structured_formatting?.main_text || result.description}
-                </Text>
-                <Text style={styles.searchResultSecondary} numberOfLines={1}>
-                  {result.structured_formatting?.secondary_text || ''}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {searchResults.map((result, index) => {
+            const placeId = result.place_id;
+            const desc = result.description;
+            return (
+              <TouchableOpacity
+                key={`${placeId}-${index}`}
+                style={styles.searchResultItem}
+                onPress={() => {
+                  console.log('Tapped on:', desc);
+                  selectPlace(placeId, desc);
+                }}
+              >
+                <Text style={styles.searchResultIcon}>📍</Text>
+                <View style={styles.searchResultText}>
+                  <Text style={styles.searchResultMain} numberOfLines={1}>
+                    {result.structured_formatting?.main_text || desc}
+                  </Text>
+                  <Text style={styles.searchResultSecondary} numberOfLines={1}>
+                    {result.structured_formatting?.secondary_text || ''}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       )}
 
@@ -581,12 +648,12 @@ export function CreateTripScreen({ onNavigate }: Props) {
           <TouchableOpacity
             key={vehicle.id}
             style={[styles.vehicleCard, selectedVehicle === vehicle.id && styles.vehicleCardSelected]}
-            onPress={() => setSelectedVehicle(vehicle.id)}
+            onPress={() => handleVehicleSelect(vehicle.id)}
           >
             <Text style={styles.vehicleIcon}>🚗</Text>
             <Text style={styles.vehicleName}>{vehicle.make} {vehicle.model}</Text>
             <Text style={styles.vehiclePlate}>{vehicle.registration_number}</Text>
-            <Text style={styles.vehicleSeats}>{vehicle.passenger_capacity || 4} seats</Text>
+            <Text style={styles.vehicleSeats}>{vehicle.seat_count || vehicle.passenger_capacity || 4} seats</Text>
           </TouchableOpacity>
         ))}
         {vehicles.length === 0 && (
@@ -594,21 +661,35 @@ export function CreateTripScreen({ onNavigate }: Props) {
         )}
       </ScrollView>
 
-      {/* Seats */}
-      <Text style={styles.sectionTitle}>Available Seats</Text>
-      <View style={styles.seatsContainer}>
-        {[1, 2, 3, 4, 5, 6].map((num) => (
-          <TouchableOpacity
-            key={num}
-            style={[styles.seatButton, tripDraft.totalSeats === num && styles.seatButtonSelected]}
-            onPress={() => setTripDraft({ totalSeats: num })}
-          >
-            <Text style={[styles.seatButtonText, tripDraft.totalSeats === num && styles.seatButtonTextSelected]}>
-              {num}
+      {/* Seats - Dynamic based on selected vehicle */}
+      {(() => {
+        const selectedVehicleData = vehicles.find(v => v.id === selectedVehicle);
+        const maxSeats = selectedVehicleData?.seat_count || selectedVehicleData?.passenger_capacity || 4;
+        const seatOptions = Array.from({ length: maxSeats }, (_, i) => i + 1);
+        
+        return (
+          <>
+            <Text style={styles.sectionTitle}>
+              Available Seats (max {maxSeats} for this vehicle)
             </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+            <View style={styles.seatsContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seatsScrollContent}>
+                {seatOptions.map((num) => (
+                  <TouchableOpacity
+                    key={num}
+                    style={[styles.seatButton, tripDraft.totalSeats === num && styles.seatButtonSelected]}
+                    onPress={() => setTripDraft({ totalSeats: num })}
+                  >
+                    <Text style={[styles.seatButtonText, tripDraft.totalSeats === num && styles.seatButtonTextSelected]}>
+                      {num}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </>
+        );
+      })()}
 
       {/* Fare */}
       <Text style={styles.sectionTitle}>Fare per Seat ($)</Text>
@@ -631,6 +712,33 @@ export function CreateTripScreen({ onNavigate }: Props) {
         <TouchableOpacity
           style={styles.fareButton}
           onPress={() => setTripDraft({ baseFare: tripDraft.baseFare + 0.5 })}
+        >
+          <Text style={styles.fareButtonText}>+</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Custom Pickup Fee */}
+      <Text style={styles.sectionTitle}>Custom Pickup Fee ($)</Text>
+      <Text style={styles.sectionHint}>Fee charged when rider requests pickup at their location</Text>
+      <View style={styles.fareContainer}>
+        <TouchableOpacity
+          style={styles.fareButton}
+          onPress={() => setTripDraft({ pickupFee: Math.max(0, tripDraft.pickupFee - 0.5) })}
+        >
+          <Text style={styles.fareButtonText}>−</Text>
+        </TouchableOpacity>
+        <TextInput
+          style={styles.fareInput}
+          value={tripDraft.pickupFee.toFixed(2)}
+          onChangeText={(text) => {
+            const value = parseFloat(text) || 0;
+            setTripDraft({ pickupFee: value });
+          }}
+          keyboardType="decimal-pad"
+        />
+        <TouchableOpacity
+          style={styles.fareButton}
+          onPress={() => setTripDraft({ pickupFee: tripDraft.pickupFee + 0.5 })}
         >
           <Text style={styles.fareButtonText}>+</Text>
         </TouchableOpacity>
@@ -990,6 +1098,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 12,
   },
+  sectionHint: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: -8,
+    marginBottom: 12,
+  },
   vehicleList: {
     marginBottom: 24,
   },
@@ -1031,8 +1145,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   seatsContainer: {
-    flexDirection: 'row',
     marginBottom: 24,
+  },
+  seatsScrollContent: {
+    flexDirection: 'row',
     gap: 10,
   },
   seatButton: {

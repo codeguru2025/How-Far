@@ -15,31 +15,83 @@ export async function getCurrentLocation(): Promise<LocationResult> {
     // Request permission
     const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
-      return { success: false, error: 'Location permission not granted' };
+      return { success: false, error: 'Location permission not granted. Please enable in settings.' };
     }
 
-    // Get current position
-    const position = await ExpoLocation.getCurrentPositionAsync({
-      accuracy: ExpoLocation.Accuracy.High,
-    });
+    console.log('Getting current position...');
+    
+    // Try to get position with timeout - use balanced accuracy for faster response
+    let position;
+    try {
+      // First try: quick with balanced accuracy
+      position = await Promise.race([
+        ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.Balanced,
+        }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Location timeout')), 10000)
+        ),
+      ]);
+    } catch (firstError) {
+      console.log('First location attempt failed, trying last known...');
+      // Fallback: try last known location
+      const lastKnown = await ExpoLocation.getLastKnownPositionAsync();
+      if (lastKnown) {
+        position = lastKnown;
+      } else {
+        // Final fallback: low accuracy
+        position = await ExpoLocation.getCurrentPositionAsync({
+          accuracy: ExpoLocation.Accuracy.Low,
+        });
+      }
+    }
+
+    if (!position) {
+      return { success: false, error: 'Could not determine your location' };
+    }
 
     const { latitude, longitude } = position.coords;
+    console.log('Got coordinates:', latitude, longitude);
 
-    // Reverse geocode to get address
-    const address = await reverseGeocode(latitude, longitude);
+    // Reverse geocode to get address - with fallback
+    let address = await reverseGeocode(latitude, longitude);
+    
+    // If Google geocoding failed, try Expo's built-in geocoder
+    if (address.fullAddress === 'Unknown Location') {
+      console.log('Google geocode failed, trying Expo geocoder...');
+      try {
+        const expoResults = await ExpoLocation.reverseGeocodeAsync({ latitude, longitude });
+        if (expoResults && expoResults.length > 0) {
+          const r = expoResults[0];
+          const parts = [r.name, r.street, r.district, r.city, r.region].filter(Boolean);
+          address = {
+            fullAddress: parts.join(', ') || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+            shortName: r.name || r.street || r.district || 'Current Location',
+          };
+        }
+      } catch (expoError) {
+        console.log('Expo geocode also failed:', expoError);
+      }
+    }
 
+    // Even if geocoding fails, return coordinates with fallback address
     return {
       success: true,
       location: {
         latitude,
         longitude,
-        address: address.fullAddress,
+        address: address.fullAddress !== 'Unknown Location' 
+          ? address.fullAddress 
+          : `Near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
         name: address.shortName,
       },
     };
   } catch (error) {
     console.error('getCurrentLocation error:', error);
-    return { success: false, error: 'Failed to get current location' };
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get current location' 
+    };
   }
 }
 

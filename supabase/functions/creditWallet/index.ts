@@ -59,7 +59,37 @@ serve(async (req: Request) => {
       });
     }
 
-    // Get wallet
+    // ATOMIC: First, try to claim this transaction by marking it as completed
+    // This prevents race conditions with the webhook
+    const { data: claimedTxn, error: claimError } = await supabase
+      .from("transactions")
+      .update({
+        status: "completed",
+        metadata: {
+          ...txn.metadata,
+          credited_at: new Date().toISOString(),
+          credited_via: "manual_reconcile",
+        },
+      })
+      .eq("id", transaction_id)
+      .eq("status", "pending")  // Only update if still pending!
+      .select()
+      .single();
+
+    if (claimError || !claimedTxn) {
+      // Another process already claimed this transaction (webhook likely)
+      console.log("Transaction already claimed by another process");
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: "Already credited by webhook",
+        already_completed: true 
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Now we have exclusive claim - safe to credit wallet
     const { data: wallet, error: walletError } = await supabase
       .from("wallets")
       .select("id, balance")
@@ -68,6 +98,11 @@ serve(async (req: Request) => {
 
     if (walletError || !wallet) {
       console.error("Wallet not found:", walletError);
+      // Revert transaction status since we couldn't credit
+      await supabase
+        .from("transactions")
+        .update({ status: "pending" })
+        .eq("id", transaction_id);
       return new Response(JSON.stringify({ error: "Wallet not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -88,19 +123,6 @@ serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // Mark transaction as completed
-    await supabase
-      .from("transactions")
-      .update({
-        status: "completed",
-        metadata: {
-          ...txn.metadata,
-          credited_at: new Date().toISOString(),
-          credited_via: "manual_reconcile",
-        },
-      })
-      .eq("id", transaction_id);
 
     console.log(`✅ Credited $${txn.amount} to user ${user_id}. New balance: $${newBalance}`);
 

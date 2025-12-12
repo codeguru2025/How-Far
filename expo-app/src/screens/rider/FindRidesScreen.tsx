@@ -12,17 +12,20 @@ import {
 } from 'react-native';
 import { COLORS } from '../../theme';
 import { Screen, Location } from '../../types';
-import { Button } from '../../components';
+import { Button, ScreenErrorBoundary } from '../../components';
 import { CONFIG } from '../../config';
 import { useTripStore } from '../../stores';
 import { findTrips } from '../../api/trips';
 import { getCurrentLocation } from '../../utils/location';
 
+// Check if Google Maps API key is configured
+const hasGoogleMapsKey = CONFIG.GOOGLE_MAPS_API_KEY && CONFIG.GOOGLE_MAPS_API_KEY.length > 10;
+
 interface Props {
   onNavigate: (screen: Screen) => void;
 }
 
-export function FindRidesScreen({ onNavigate }: Props) {
+function FindRidesScreenContent({ onNavigate }: Props) {
   const { 
     searchOrigin, searchDestination, setSearchLocations,
     availableTrips, setAvailableTrips,
@@ -40,8 +43,16 @@ export function FindRidesScreen({ onNavigate }: Props) {
 
   // Auto-capture rider's location on mount
   useEffect(() => {
-    captureCurrentLocation();
+    if (hasGoogleMapsKey) {
+      captureCurrentLocation();
+    }
   }, []);
+
+  // Clear search results when step changes
+  useEffect(() => {
+    setSearchQuery('');
+    setSearchResults([]);
+  }, [step]);
 
   async function captureCurrentLocation() {
     setIsGettingLocation(true);
@@ -358,6 +369,33 @@ export function FindRidesScreen({ onNavigate }: Props) {
     </ScrollView>
   );
 
+  // Check for missing API key
+  if (!hasGoogleMapsKey) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => onNavigate('home')} style={styles.backButton}>
+            <Text style={styles.backIcon}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Find a Ride</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorIcon}>⚠️</Text>
+          <Text style={styles.errorTitle}>Maps Not Configured</Text>
+          <Text style={styles.errorText}>
+            Google Maps API key is missing. Please check your .env configuration.
+          </Text>
+          <Button
+            title="Go Back"
+            onPress={() => onNavigate('home')}
+            style={{ marginTop: 20 }}
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -378,10 +416,41 @@ export function FindRidesScreen({ onNavigate }: Props) {
   );
 }
 
+// Wrap with error boundary for better error handling
+export function FindRidesScreen(props: Props) {
+  return (
+    <ScreenErrorBoundary screenName="FindRidesScreen">
+      <FindRidesScreenContent {...props} />
+    </ScreenErrorBoundary>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   header: {
     flexDirection: 'row',

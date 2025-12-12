@@ -85,7 +85,7 @@ export function ScanQRScreen({ onNavigate }: Props) {
         return;
       }
 
-      const fareAmount = booking.fare || amount;
+      const fareAmount = booking.total_amount || booking.base_amount || amount;
       const riderFee = Math.round(fareAmount * 0.025 * 100) / 100; // 2.5%
       const driverFee = Math.round(fareAmount * 0.075 * 100) / 100; // 7.5%
       const riderTotal = fareAmount + riderFee;
@@ -95,7 +95,7 @@ export function ScanQRScreen({ onNavigate }: Props) {
       const { data: riderWallet, error: riderWalletError } = await supabase
         .from('wallets')
         .select('id, balance')
-        .eq('user_id', booking.commuter_id)
+        .eq('user_id', booking.rider_id)
         .single();
 
       if (riderWalletError || !riderWallet) {
