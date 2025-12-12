@@ -23,6 +23,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationQueriesSchemes": [
           "innbucks",
+          "schinn.wbpycode",
+          "innbucks",
           "schinn.wbpycode"
         ],
         "NSLocationWhenInUseUsageDescription": "How Far needs your location to show nearby rides and calculate routes to your destination.",
@@ -32,9 +34,10 @@
         "NSMicrophoneUsageDescription": "How Far may need microphone access for voice features."
       },
       "config": {
-        "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
+        "googleMapsApiKey": ""
       },
       "associatedDomains": [
+        "applinks:howfar.app",
         "applinks:howfar.app"
       ]
     },

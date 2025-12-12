@@ -63,6 +63,8 @@ module.exports = ({ config }) => {
       bundleIdentifier: appConfig.bundleIdentifier,
       buildNumber: process.env.BUILD_NUMBER || '1',
       infoPlist: {
+        // Export compliance - app only uses standard HTTPS (encryption is server-side)
+        ITSAppUsesNonExemptEncryption: false,
         LSApplicationQueriesSchemes: ['innbucks', 'schinn.wbpycode'],
         NSLocationWhenInUseUsageDescription: 
           'How Far needs your location to show nearby rides and calculate routes to your destination.',
